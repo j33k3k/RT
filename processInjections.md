@@ -151,42 +151,42 @@ int main() {
 ```
 
 ### SYSMON data
-1. "CreateRemoteThread detected:
-RuleName: technique_id=T1055,technique_name=Process Injection
-UtcTime: 2026-05-12 10:59:21.168
-SourceProcessGuid: {ED9BFE1B-0808-6A03-5206-000000000A00}
-SourceProcessId: 13124
+1. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
+UtcTime: 2026-05-12 11:15:16.217
+SourceProcessGUID: {ED9BFE1B-0BC3-6A03-8E06-000000000A00}
+SourceProcessId: 5856
+SourceThreadId: 5232
 SourceImage: C:\Users\jens\Documents\procInj\t1_classic_crt.exe
-TargetProcessGuid: {ED9BFE1B-0741-6A03-4F06-000000000A00}
-TargetProcessId: 11168
+TargetProcessGUID: {ED9BFE1B-0B95-6A03-8D06-000000000A00}
+TargetProcessId: 7524
 TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
-NewThreadId: 2580
-StartAddress: 0x000001B21DF60000
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+161fc4|C:\WINDOWS\System32\KERNELBASE.dll+42e76|C:\Users\jens\Documents\procInj\t1_classic_crt.exe+15d5|C:\Users\jens\Documents\procInj\t1_classic_crt.exe+10d9|C:\Users\jens\Documents\procInj\t1_classic_crt.exe+1456|C:\WINDOWS\System32\KERNEL32.DLL+2e8d7|C:\WINDOWS\SYSTEM32\ntdll.dll+8c3fc
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "CreateRemoteThread detected:
+RuleName: technique_id=T1055,technique_name=Process Injection
+UtcTime: 2026-05-12 11:15:16.217
+SourceProcessGuid: {ED9BFE1B-0BC3-6A03-8E06-000000000A00}
+SourceProcessId: 5856
+SourceImage: C:\Users\jens\Documents\procInj\t1_classic_crt.exe
+TargetProcessGuid: {ED9BFE1B-0B95-6A03-8D06-000000000A00}
+TargetProcessId: 7524
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+NewThreadId: 13228
+StartAddress: 0x000002ED1B650000
 StartModule: -
 StartFunction: -
 SourceUser: WIN11\jens
 TargetUser: WIN11\jens"
 
-2. "Process accessed:
-RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
-UtcTime: 2026-05-12 10:59:21.405
-SourceProcessGUID: {ED9BFE1B-0741-6A03-4F06-000000000A00}
-SourceProcessId: 11168
-SourceThreadId: 2580
-SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
-TargetProcessGUID: {ED9BFE1B-0809-6A03-5606-000000000A00}
-TargetProcessId: 12688
-TargetImage: C:\WINDOWS\system32\cmd.exe
-GrantedAccess: 0x1fffff
-CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+163514|C:\WINDOWS\System32\KERNELBASE.dll+b0c3a|C:\WINDOWS\System32\KERNELBASE.dll+ae153|C:\WINDOWS\System32\KERNELBASE.dll+adcb6|C:\WINDOWS\System32\KERNEL32.DLL+44fd4|UNKNOWN(000001B21DF601BC)
-SourceUser: WIN11\jens
-TargetUser: WIN11\jens"
-
 3. "Process Create:
 RuleName: technique_id=T1059.003,technique_name=Windows Command Shell
-UtcTime: 2026-05-12 10:59:21.401
-ProcessGuid: {ED9BFE1B-0809-6A03-5606-000000000A00}
-ProcessId: 12688
+UtcTime: 2026-05-12 11:15:16.502
+ProcessGuid: {ED9BFE1B-0BC4-6A03-9206-000000000A00}
+ProcessId: 10416
 Image: C:\Windows\System32\cmd.exe
 FileVersion: 10.0.26100.8115 (WinBuild.160101.0800)
 Description: Windows Command Processor
@@ -201,17 +201,32 @@ LogonId: 0xb3f74
 TerminalSessionId: 1
 IntegrityLevel: Medium
 Hashes: SHA1=2EDE04B00B744D0D2D5614E83997022CC3EF3656,MD5=77F0062F490BCC7023763A422E561945,SHA256=14CC8AB1DCF0D9F19E8FB82DEB547CF8C462C56A0E43F7ADDC02641AB3C81651,IMPHASH=B0F049C014592B156EB1FA857E99CEB9
-ParentProcessGuid: {ED9BFE1B-0741-6A03-4F06-000000000A00}
-ParentProcessId: 11168
+ParentProcessGuid: {ED9BFE1B-0B95-6A03-8D06-000000000A00}
+ParentProcessId: 7524
 ParentImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
 ParentCommandLine: ""C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe"" RestartByRestartManager:* 
 ParentUser: WIN11\jens"
 
-4. "Network connection detected:
+4. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-12 11:15:16.546
+SourceProcessGUID: {ED9BFE1B-0B95-6A03-8D06-000000000A00}
+SourceProcessId: 7524
+SourceThreadId: 13228
+SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+TargetProcessGUID: {ED9BFE1B-0BC4-6A03-9206-000000000A00}
+TargetProcessId: 10416
+TargetImage: C:\WINDOWS\system32\cmd.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+163514|C:\WINDOWS\System32\KERNELBASE.dll+b0c3a|C:\WINDOWS\System32\KERNELBASE.dll+ae153|C:\WINDOWS\System32\KERNELBASE.dll+adcb6|C:\WINDOWS\System32\KERNEL32.DLL+44fd4|UNKNOWN(000002ED1B6501BC)
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+5. "Network connection detected:
 RuleName: technique_id=T1571,technique_name=Non-Standard Port
-UtcTime: 2026-05-12 10:59:20.654
-ProcessGuid: {ED9BFE1B-0741-6A03-4F06-000000000A00}
-ProcessId: 11168
+UtcTime: 2026-05-12 11:15:22.115
+ProcessGuid: {ED9BFE1B-0B95-6A03-8D06-000000000A00}
+ProcessId: 7524
 Image: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
 User: WIN11\jens
 Protocol: tcp
@@ -219,7 +234,7 @@ Initiated: true
 SourceIsIpv6: false
 SourceIp: 192.168.32.39
 SourceHostname: -
-SourcePort: 57327
+SourcePort: 56719
 SourcePortName: -
 DestinationIsIpv6: false
 DestinationIp: 192.168.32.49
@@ -228,9 +243,7 @@ DestinationPort: 4444
 DestinationPortName: -"
 
 ### SYSMON analysis
-t1_classic_crt.exe → OpenProcess(notepad)     [EID 10]
-                   → CreateRemoteThread        [EID 8]
-                   → notepad spawns cmd.exe    [EID 1]
-                   → notepad connects to C2    [EID 3]
-- EID 8 CreateRemoteThread: "StartModule: -" is a critical detection signal. Legitimate threads start from a named module. Anonymous memory is almost always shellcode.
+Had to add on include with 0x1FFFFF to catch event 1, "<GrantedAccess name="technique_id=T1055.001,technique_name=ProcessInjectionDelux" condition="contains any">0x1F0FFF;0x1F1FFF;0x143A;0x1410;0x1010;0x1F2FFF;0x1F3FFF;0x1FFFFF;0x147A</GrantedAccess>"
+- EID 10 Injector opens handle to Notepad with CallTrace: t1_classic_crt.exe+15d5 → KERNELBASE → ntdll
+- EID 8 CreateRemoteThread: "StartModule: -" is a critical detection signal as legitimate threads start from a named module. Anonymous memory is almost always shellcode.
 - EID 10 ProcessAccess: The UNKNOWN in the call trace is another strong indicator, legitimate code always has a named module in the trace. Shellcode executing from anonymous memory shows up as UNKNOWN.

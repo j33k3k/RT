@@ -476,10 +476,9 @@ DestinationPortName: -"
 | 6    | Notepad beacons to C2                | EID 3      | T1571 Non-Standard Port |
 
 ### Key Indicators
-- **EID 10** `CallTrace: t2_ntcreatethreadex.exe+15d8` — injector binary
+- **EID 10** `CallTrace: t2_ntcreatethreadex.exe+15d8` injector binary
   visible in call trace. Clean chain through ntdll and KERNELBASE into
   the injector with no UNKNOWN modules at this stage.
-- **EID 8** `StartModule: -` — thread starts from anonymous memory.
+- **EID 8** `StartModule: -` thread starts from anonymous memory.
 - **EID 10** `SourceThreadId: 6484` matches `NewThreadId: 6484` from
-  EID 8 — the injected thread is the one making subsequent API calls.
-  Direct forensic link between thread creation and post-injection activity.
+  EID 8 the injected thread is the one making subsequent API calls. Direct forensic link between thread creation and post-injection activity.

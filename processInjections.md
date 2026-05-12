@@ -247,3 +247,11 @@ Had to add ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to cat
 - EID 10 Injector opens handle to Notepad with CallTrace: t1_classic_crt.exe+15d5 → KERNELBASE → ntdll
 - EID 8 CreateRemoteThread: "StartModule: -" is a critical detection signal as legitimate threads start from a named module. Anonymous memory is almost always shellcode.
 - EID 10 ProcessAccess: The UNKNOWN in the call trace is another strong indicator, legitimate code always has a named module in the trace. Shellcode executing from anonymous memory shows up as UNKNOWN.
+
+Attack step                        Sysmon event        Your rule
+─────────────────────────────────────────────────────────────────
+Injector opens handle to target    EID 10              ProcessInjectionDelux ✅
+Remote thread created              EID 8               T1055 ✅
+Shellcode spawns cmd               EID 1               T1059.003 ✅
+Shellcode opens handle to cmd      EID 10              ProcessInjectionDelux ✅
+C2 callback                        EID 3               T1571 ✅

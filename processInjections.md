@@ -243,7 +243,7 @@ DestinationPort: 4444
 DestinationPortName: -"
 
 ### SYSMON analysis
-Had to add on include with 0x1FFFFF to catch event 1, "<GrantedAccess name="technique_id=T1055.001,technique_name=ProcessInjectionDelux" condition="contains any">0x1F0FFF;0x1F1FFF;0x143A;0x1410;0x1010;0x1F2FFF;0x1F3FFF;0x1FFFFF;0x147A</GrantedAccess>"
+Had to add ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to catch event 1
 - EID 10 Injector opens handle to Notepad with CallTrace: t1_classic_crt.exe+15d5 → KERNELBASE → ntdll
 - EID 8 CreateRemoteThread: "StartModule: -" is a critical detection signal as legitimate threads start from a named module. Anonymous memory is almost always shellcode.
 - EID 10 ProcessAccess: The UNKNOWN in the call trace is another strong indicator, legitimate code always has a named module in the trace. Shellcode executing from anonymous memory shows up as UNKNOWN.

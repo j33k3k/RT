@@ -84,7 +84,7 @@ DWORD GetPID(const wchar_t* procName) {
 }
 ```
 
-## Technique 1. Classic CreateRemoteThread
+### Technique 1. Classic CreateRemoteThread
 Opens a handle to a running process, writes shellcode into its memory space,
 then creates a new thread inside that process to execute it. All through
 documented Win32 API calls in kernel32.dll. Most well-known injection
@@ -156,7 +156,7 @@ int main() {
 }
 ```
 
-### SYSMON data
+#### SYSMON data
 1. "Process accessed:
 RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
 UtcTime: 2026-05-12 11:15:16.217
@@ -248,7 +248,7 @@ DestinationHostname: -
 DestinationPort: 4444
 DestinationPortName: -"
 
-### SYSMON analysis
+#### SYSMON analysis
 Had to add in ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to catch event 1. Added ProcessInjectionDelux to cover all types of RW codes.
 
 | Attack Step                       | Sysmon EID | Rule Triggered          |

@@ -77,18 +77,18 @@ DWORD GetPID(const wchar_t* procName) {
 ```
 
 ## 1. Classic CreateRemoteThread
-The attack opens a handle to a running process, writes shellcode into its memory, then creates a new thread inside that process to execute it. All through documented Win32 API calls in kernel32.dll. It is the most well-known injection technique and every mature EDR detects it — which is exactly why it's your baseline.
+The attack opens a handle to a running process, writes shellcode into its memory, then creates a new thread inside that process to execute it. All through documented Win32 API calls in kernel32.dll. It is the most well-known injection technique and should be detected by all EDR.
 The four API calls and what Sysmon sees at each step:
-- OpenProcess()         → EID 10 — handle opened with PROCESS_ALL_ACCESS (0x1fffff)
-- VirtualAllocEx()      → allocates RWX memory in target (no Sysmon event)
+- OpenProcess()    → EID 10 handle opened with PROCESS_ALL_ACCESS (0x1fffff)
+- VirtualAllocEx()  → allocates RWX memory in target (no Sysmon event)
 - WriteProcessMemory()  → writes shellcode bytes (no Sysmon event)
-- CreateRemoteThread()  → EID 8 — new thread created in remote process
+- CreateRemoteThread()  → EID 8 new thread created in remote process
 
 ```
 // t1_classic_crt.cpp
 #include "common.h"
 
-int wmain() {
+int main() {
     DWORD pid = GetPID(L"notepad.exe");
     if (!pid) {
         wprintf(L"[-] notepad.exe not found\n");

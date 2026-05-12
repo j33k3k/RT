@@ -85,12 +85,18 @@ DWORD GetPID(const wchar_t* procName) {
 ```
 
 ## Technique 1. Classic CreateRemoteThread
-The attack opens a handle to a running process, writes shellcode into its memory, then creates a new thread inside that process to execute it. All through documented Win32 API calls in kernel32.dll. It is the most well-known injection technique and should be detected by all EDR.
+Opens a handle to a running process, writes shellcode into its memory space,
+then creates a new thread inside that process to execute it. All through
+documented Win32 API calls in kernel32.dll. Most well-known injection
+technique.
+
 The four API calls and what Sysmon sees at each step:
-- OpenProcess()    → EID 10 handle opened with PROCESS_ALL_ACCESS (0x1fffff)
-- VirtualAllocEx()  → allocates RWX memory in target (no Sysmon event)
-- WriteProcessMemory()  → writes shellcode bytes (no Sysmon event)
-- CreateRemoteThread()  → EID 8 new thread created in remote process
+| API Call               | Layer   | Sysmon Event |
+|------------------------|---------|--------------|
+| OpenProcess()          | Win32   | EID 10       |
+| VirtualAllocEx()       | Win32   | —            |
+| WriteProcessMemory()   | Win32   | —            |
+| CreateRemoteThread()   | Win32   | EID 8        |
 
 ```
 // t1_classic_crt.cpp
@@ -243,15 +249,24 @@ DestinationPort: 4444
 DestinationPortName: -"
 
 ### SYSMON analysis
-Had to add ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to catch event 1. Added ProcessInjectionDelux to cover all types of RW codes.
-- EID 10 Injector opens handle to Notepad with CallTrace: t1_classic_crt.exe+15d5 → KERNELBASE → ntdll
-- EID 8 CreateRemoteThread: "StartModule: -" is a critical detection signal as legitimate threads start from a named module. Anonymous memory is almost always shellcode.
-- EID 10 ProcessAccess: The UNKNOWN in the call trace is another strong indicator, legitimate code always has a named module in the trace. Shellcode executing from anonymous memory shows up as UNKNOWN.
+Had to add in ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to catch event 1. Added ProcessInjectionDelux to cover all types of RW codes.
 
-Attack step                        Sysmon event        Your rule
-─────────────────────────────────────────────────────────────────
-Injector opens handle to target    EID 10              ProcessInjectionDelux ✅
-Remote thread created              EID 8               T1055 ✅
-Shellcode spawns cmd               EID 1               T1059.003 ✅
-Shellcode opens handle to cmd      EID 10              ProcessInjectionDelux ✅
-C2 callback                        EID 3               T1571 ✅
+| Attack Step                       | Sysmon EID | Rule Triggered          |
+|-----------------------------------|------------|-------------------------|
+| Injector opens handle to target   | EID 10     | ProcessInjectionDelux   |
+| Remote thread created             | EID 8      | T1055 Process Injection |
+| Shellcode spawns cmd.exe          | EID 1      | T1059.003 Cmd Shell     |
+| Shellcode opens handle to cmd     | EID 10     | ProcessInjectionDelux   |
+| C2 callback                       | EID 3      | T1571 Non-Standard Port |
+
+### Key Indicators
+- **EID 8** `StartModule: -` — thread starts from anonymous memory, not a
+  named module. Strongest single indicator of shellcode execution.
+- **EID 10** `GrantedAccess: 0x1fffff` — PROCESS_ALL_ACCESS handle open.
+  Caught by ProcessInjectionDelux rule.
+- **EID 10** `CallTrace: UNKNOWN(address)` — shellcode calling Win32 APIs
+  from anonymous memory. Legitimate code always has a named module in trace.
+- **EID 1** Notepad.exe → cmd.exe — anomalous parent-child relationship.
+  Notepad should never spawn a shell.
+- **EID 3** Notepad.exe → 192.168.32.49:4444 — legitimate notepad process
+  making outbound C2 connection.

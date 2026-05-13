@@ -1,4 +1,3 @@
-// t1_classic_crt_minimal.cpp
 #include "common.h"
 
 int main() {

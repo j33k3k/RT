@@ -672,9 +672,9 @@ footprint.
 | Step | Action                                  | Sysmon EID | Rule Triggered          |
 |------|-----------------------------------------|------------|-------------------------|
 | 1    | Injector opens handle to Notepad        | EID 10     | ProcessInjectionDelux   |
-| 2    | Shellcode written to remote memory      | —          | —                       |
-| 3    | APC queued to suspended main thread     | —          | —                       |
-| 4    | Thread resumed — APC executes           | —          | —                       |
+| 2    | Shellcode written to remote memory      | -          | -                       |
+| 3    | APC queued to suspended main thread     | -          | -                       |
+| 4    | Thread resumed — APC executes           | -          | -                       |
 | 5    | Shellcode opens handle to cmd.exe       | EID 10     | ProcessInjectionDelux   |
 
 ### Key Indicators
@@ -690,14 +690,14 @@ Process hollowing creates a legitimate process suspended, unmaps its original im
 
 | API Call                 | Layer      | Sysmon Event |
 |--------------------------|------------|--------------|
-| CreateProcess(SUSPENDED) | Win32      | —            |
-| NtQueryInformationProcess| Native API | —            |
-| ReadProcessMemory()      | Win32      | —            |
+| CreateProcess(SUSPENDED) | Win32      | -            |
+| NtQueryInformationProcess| Native API | -            |
+| ReadProcessMemory()      | Win32      | -            |
 | NtUnmapViewOfSection()   | Native API | EID 25       |
-| VirtualAllocEx()         | Win32      | —            |
-| WriteProcessMemory()     | Win32      | —            |
-| SetThreadContext()       | Win32      | —            |
-| ResumeThread()           | Win32      | —            |
+| VirtualAllocEx()         | Win32      | -            |
+| WriteProcessMemory()     | Win32      | -            |
+| SetThreadContext()       | Win32      | -            |
+| ResumeThread()           | Win32      | -            |
 
 ```
 // t4_process_hollowing.cpp
@@ -847,8 +847,8 @@ EID 25 fired with Type: Image is replaced, confirms Sysmon detected the in-memor
 |------|-----------------------------------------|------------|-------------------------|
 | 1    | Injector opens handle to Notepad        | EID 10     | ProcessInjectionDelux   |
 | 2    | NtUnmapViewOfSection removes image      | EID 25     | Process Tampering       |
-| 3    | Shellcode written to remote memory      | —          | —                       |
-| 4    | Thread context redirected to shellcode  | —          | —                       |
+| 3    | Shellcode written to remote memory      | -          | -                       |
+| 4    | Thread context redirected to shellcode  | -          | -                       |
 | 5    | Thread resumed                          | —          | —                       |
 
 ### Key Indicators

@@ -31,7 +31,7 @@ On Windows 11, when injecting into a process owned by the same user in the same 
 
 
 ## Sysmon CallTrace explained
-CallTrace reads right to left with the rightmost entry is where execution started. UNKNOWN in calltrace means the code at that address has no associated PE module with raw code executing from VirtualAllocEx allocated memory and most often shellcode. 
+CallTrace reads right to left with the rightmost entry is where execution started. UNKNOWN in calltrace means the code at that address has no associated PE module with raw code executing from VirtualAllocEx allocated memory and most often shellcode. All executables compiled with MinGW which show some KERNEL32 CRT noise in init. 
 
 | CallTrace Origin          | Meaning                        | Suspicion  |
 |---------------------------|--------------------------------|------------|
@@ -44,7 +44,7 @@ CallTrace reads right to left with the rightmost entry is where execution starte
 |-------------------------------------------|------------------------|
 | ntdll ← KERNELBASE ← KERNEL32 ← app.exe   | Normal Win32 API       |
 | ntdll ← KERNELBASE ← app.exe              | Native API (ntdll)     |
-| ntdll ← KERNEL32(CRT) ← app.exe           | Direct Syscall         |
+| ntdll ← app.exe                           | Direct Syscall         |
 | ntdll ← KERNELBASE ← KERNEL32 ← UNKNOWN   | Shellcode post-inject  |
 
 
@@ -1129,7 +1129,7 @@ DestinationPortName: -"
 ### Sysmon Analysis 
 Direct syscalls produce identical kernel events as previous techniques as Sysmon kernel callbacks are completely unaffected by userland hook bypass. The key difference vs T1 and T2 is in the
 EID 10 CallTrace and GrantedAccess value. NtOpenProcess via direct syscall enforces exact rights more strictly than Win32 OpenProcess. T5 CallTrace shows KERNELBASE.dll is absent from chain in T1/T2 it appeared between
-ntdll and the injector binary because OpenProcess routes through it. In T5 the syscall jumps directly from the injector into the kernel bypassing KERNELBASE.dll entirely where OpenProcess actually lives. 
+ntdll and the injector binary because OpenProcess routes through it. In T5 the syscall jumps directly from the injector into the kernel bypassing KERNELBASE.dll entirely where OpenProcess actually lives. KERNEL32.DLL+2e957 in calltrace is from the mingw CRT runtime initialisation.
 
 | Step | Action                              | Sysmon EID | Rule Triggered          |
 |------|-------------------------------------|------------|-------------------------|

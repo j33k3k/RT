@@ -1283,7 +1283,7 @@ DestinationPortName: -"
 
 
 ### Sysmon Analysis
-ID 10 for t6_dll_injection.exe opening handle to Notepad not present in the events. Only post-injection activity visible in EID 10. Check config that it includes
+EID 10 for t6_dll_injection.exe opening handle to Notepad is not present in the events. Only post-injection activity visible in EID 10. Will need to check config that it includes
 handle opens with PAGE_READWRITE allocation as DLL path uses RW not RWX.
 
 | Step | Action                                  | Sysmon EID | Rule Triggered           |

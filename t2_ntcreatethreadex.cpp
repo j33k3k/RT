@@ -1,4 +1,3 @@
-// t2_ntcreatethreadex.cpp
 #include "common.h"
 
 typedef NTSTATUS(WINAPI* pNtCreateThreadEx)(

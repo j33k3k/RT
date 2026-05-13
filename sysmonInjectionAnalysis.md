@@ -1155,6 +1155,20 @@ ntdll and the injector binary because OpenProcess routes through it. In T5 the s
 
 
 ## T6. DLL Injection
+Loads a malicious DLL into a target process by writing the DLL path
+into remote memory and creating a thread that calls LoadLibraryA with
+that path as its argument. Key difference from T1-T5 instead of
+writing raw shellcode, a legitimate Windows API function is used as
+the thread entry point. This changes the EID 8 StartModule from
+anonymous memory to kernel32.dll.
+| API Call              | Layer | Sysmon Event              |
+|-----------------------|-------|---------------------------|
+| OpenProcess()         | Win32 | EID 10                    |
+| VirtualAllocEx()      | Win32 | —                         |
+| WriteProcessMemory()  | Win32 | —                         |
+| CreateRemoteThread()  | Win32 | EID 8                     |
+| LoadLibraryA()        | Win32 | EID 7 (fires in target)   |
+
 
 
 ### Sysmon Data
@@ -1266,3 +1280,27 @@ DestinationIp: 192.168.32.49
 DestinationHostname: -
 DestinationPort: 4444
 DestinationPortName: -"
+
+
+### Sysmon Analysis
+ID 10 for t6_dll_injection.exe opening handle to Notepad not present in the events. Only post-injection activity visible in EID 10. Check config that it includes
+handle opens with PAGE_READWRITE allocation as DLL path uses RW not RWX.
+
+| Step | Action                                  | Sysmon EID | Rule Triggered           |
+|------|-----------------------------------------|------------|--------------------------|
+| 1    | Injector opens handle to Notepad        | EID 10     | ProcessInjectionDelux    |
+| 2    | DLL path written to remote memory       | -          | -                        |
+| 3    | CreateRemoteThread(LoadLibraryA)        | EID 8      | T1055 Process Injection  |
+| 4    | LoadLibraryA loads evil.dll             | EID 7      | T1574.002 DLL Side-Load  |
+| 5    | evil.dll opens handle to rundll32       | EID 10     | ProcessInjectionDelux    |
+
+### Key Indicators
+- **EID 8** `StartModule: kernel32.dll` thread starts from named
+  legitimate module. StartFunction: LoadLibraryA visible strong DLL injection indicator.
+- **EID 7** `ImageLoaded: C:\temp\evil.dll` unsigned DLL loaded from
+  suspicious path.
+- **EID 10** `CallTrace: evil.dll+10ef` named DLL module visible in
+  call trace. Different from T1-T5 where UNKNOWN appeared.
+- **EID 10** `UNKNOWN(00000191BE240195)` shellcode inside evil.dll
+  executing from anonymous memory. DLL loaded itself then unpacked
+  shellcode into allocated memory.

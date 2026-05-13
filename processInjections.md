@@ -854,3 +854,143 @@ EID 25 fired with Type: Image is replaced, confirms Sysmon detected the in-memor
 ### Key Indicators
 - **EID 25** `Type: Image is replaced` On-disk PE no longer matches in-memory image.
 - **EID 10** `GrantedAccess: 0x1fffff` injector opens handle to target.
+
+
+## 5. Direct Syscall
+Direct syscalls bypasses ntdll.dll entirely by executing the syscall instruction directly in your code. EDRs hook ntdll.dll functions in userland to intercept calls but direct syscalls jump straight past those hooks into the kernel. However Sysmon sits in the kernel and sees the same resulting kernel events regardless of how they were triggered.
+
+| API Call                    | Layer          | Sysmon Event |
+|-----------------------------|----------------|--------------|
+| SysNtOpenProcess()          | Direct Syscall | EID 10       |
+| SysNtAllocateVirtualMemory()| Direct Syscall | —            |
+| SysNtWriteVirtualMemory()   | Direct Syscall | —            |
+| SysNtCreateThreadEx()       | Direct Syscall | EID 8        |
+
+| Function                 | SSN    |
+|--------------------------|--------|
+| NtOpenProcess            | 0x0026 |
+| NtAllocateVirtualMemory  | 0x0018 |
+| NtWriteVirtualMemory     | 0x003A |
+| NtCreateThreadEx         | 0x00C9 |
+| NtProtectVirtualMemory   | 0x0050 |
+
+
+
+### Sysmon Data
+1. "Process accessed:
+RuleName: technique_id=T1055,technique_name=Process Injection
+UtcTime: 2026-05-13 12:15:29.716
+SourceProcessGUID: {ED9BFE1B-6B61-6A04-F202-000000000F00}
+SourceProcessId: 11744
+SourceThreadId: 6944
+SourceImage: C:\Users\jens\Documents\procInj\t5_direct_syscall.exe
+TargetProcessGUID: {ED9BFE1B-6884-6A04-BD02-000000000F00}
+TargetProcessId: 5500
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+GrantedAccess: 0x142a
+CallTrace: C:\Users\jens\Documents\procInj\t5_direct_syscall.exe+185a|C:\Users\jens\Documents\procInj\t5_direct_syscall.exe+161c|C:\Users\jens\Documents\procInj\t5_direct_syscall.exe+10d9|C:\Users\jens\Documents\procInj\t5_direct_syscall.exe+1456|C:\WINDOWS\System32\KERNEL32.DLL+2e957|C:\WINDOWS\SYSTEM32\ntdll.dll+427c
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "CreateRemoteThread detected:
+RuleName: technique_id=T1055,technique_name=Process Injection
+UtcTime: 2026-05-13 12:15:29.718
+SourceProcessGuid: {ED9BFE1B-6B61-6A04-F202-000000000F00}
+SourceProcessId: 11744
+SourceImage: C:\Users\jens\Documents\procInj\t5_direct_syscall.exe
+TargetProcessGuid: {ED9BFE1B-6884-6A04-BD02-000000000F00}
+TargetProcessId: 5500
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+NewThreadId: 9912
+StartAddress: 0x000001DE7DB20000
+StartModule: -
+StartFunction: -
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+3. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-13 12:15:29.885
+SourceProcessGUID: {ED9BFE1B-6884-6A04-BD02-000000000F00}
+SourceProcessId: 5500
+SourceThreadId: 9912
+SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+TargetProcessGUID: {ED9BFE1B-6B61-6A04-F302-000000000F00}
+TargetProcessId: 8056
+TargetImage: C:\WINDOWS\system32\cmd.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+1636b4|C:\WINDOWS\System32\KERNELBASE.dll+8b82d|C:\WINDOWS\System32\KERNELBASE.dll+88d43|C:\WINDOWS\System32\KERNELBASE.dll+888a6|C:\WINDOWS\System32\KERNEL32.DLL+44f14|UNKNOWN(000001DE7DB201BC)
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+4. "Process Create:
+RuleName: technique_id=T1059.003,technique_name=Windows Command Shell
+UtcTime: 2026-05-13 12:15:29.877
+ProcessGuid: {ED9BFE1B-6B61-6A04-F302-000000000F00}
+ProcessId: 8056
+Image: C:\Windows\System32\cmd.exe
+FileVersion: 10.0.26100.8328 (WinBuild.160101.0800)
+Description: Windows Command Processor
+Product: Microsoft® Windows® Operating System
+Company: Microsoft Corporation
+OriginalFileName: Cmd.Exe
+CommandLine: cmd
+CurrentDirectory: C:\Users\jens\
+User: WIN11\jens
+LogonGuid: {ED9BFE1B-5BCF-6A04-9856-1A0000000000}
+LogonId: 0x1a5698
+TerminalSessionId: 1
+IntegrityLevel: Medium
+Hashes: SHA1=8EFFECCD068002141AEF22B095A52E1D41656C98,MD5=CED4AA0B4CBF72E2520E0A2CCFF79370,SHA256=D5697FEF6995E992B9232A2B19665A297743427316C7225A5B772F0032F20FCA,IMPHASH=B0F049C014592B156EB1FA857E99CEB9
+ParentProcessGuid: {ED9BFE1B-6884-6A04-BD02-000000000F00}
+ParentProcessId: 5500
+ParentImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+ParentCommandLine: ""C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe"" RestartByRestartManager:* 
+ParentUser: WIN11\jens"
+
+5. "Network connection detected:
+RuleName: technique_id=T1571,technique_name=Non-Standard Port
+UtcTime: 2026-05-13 12:15:27.820
+ProcessGuid: {ED9BFE1B-6884-6A04-BD02-000000000F00}
+ProcessId: 5500
+Image: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+User: WIN11\jens
+Protocol: tcp
+Initiated: true
+SourceIsIpv6: false
+SourceIp: 192.168.32.39
+SourceHostname: -
+SourcePort: 63893
+SourcePortName: -
+DestinationIsIpv6: false
+DestinationIp: 192.168.32.49
+DestinationHostname: -
+DestinationPort: 4444
+DestinationPortName: -"
+
+### Sysmon Analysis 
+Direct syscalls produce identical kernel events as previous techniques as Sysmon kernel callbacks are completely unaffected by userland hook bypass. The key difference vs T1 and T2 is in the
+EID 10 CallTrace and GrantedAccess value. NtOpenProcess via direct syscall enforces exact rights more strictly than Win32 OpenProcess. T5 CallTrace shows injector binary jumping directly without passing
+through ntdll or KERNELBASE. This is a detectable anomaly where legitimate processes always route through ntdll for system calls.
+
+| Step | Action                              | Sysmon EID | Rule Triggered          |
+|------|-------------------------------------|------------|-------------------------|
+| 1    | SysNtOpenProcess to Notepad         | EID 10     | Process Injection       |
+| 2    | SysNtAllocateVirtualMemory          | -          | -                       |
+| 3    | SysNtWriteVirtualMemory             | -          | -                       |
+| 4    | SysNtCreateThreadEx creates thread  | EID 8      | T1055 Process Injection |
+| 5    | Shellcode opens handle to cmd.exe   | EID 10     | ProcessInjectionDelux   |
+
+### Key Indicators
+- **EID 10** `GrantedAccess: 0x142a` first time minimal access mask
+  appears in lab. Direct syscall requested exact rights needed, kernel
+  granted them without promotion to 0x1fffff. Confirms access mask
+  promotion observed in T1-T3 was a Win32 API behavior not a kernel behavior.
+- **EID 10** `CallTrace: t5_direct_syscall.exe+185a` ntdll and KERNELBASE
+  completely absent from injector call chain. Direct jump from binary into
+  kernel with only KERNEL32 visible for CRT runtime. Strongest CallTrace
+  difference vs all previous techniques.
+- **EID 8** `StartModule: -` identical to T1 and T2. Kernel thread
+  creation event survives complete bypass of userland API stack.
+- **EID 10** `UNKNOWN(000001DE7DB201BC)` shellcode executing from
+  anonymous memory. Same fingerprint as all previous techniques.

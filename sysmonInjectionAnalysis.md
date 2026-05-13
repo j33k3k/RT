@@ -35,7 +35,7 @@ CallTrace reads right to left with the rightmost entry is where execution starte
 
 | CallTrace Origin          | Meaning                        | Suspicion  |
 |---------------------------|--------------------------------|------------|
-| someapp.exe+offset        | Named PE module                | Normal     |
+| app.exe+offset            | Named PE module                | Normal     |
 | ntdll.dll+offset          | Thread startup boilerplate     | Normal     |
 | KERNELBASE.dll+offset     | Windows API routing            | Normal     |
 | UNKNOWN(address)          | Anonymous memory               | High       |

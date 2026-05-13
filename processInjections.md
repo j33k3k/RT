@@ -687,6 +687,7 @@ footprint.
 ## 3. ProcessHollowing
 Process hollowing creates a legitimate process suspended, unmaps its original image from memory, then maps malicious code in its place before resuming. The process looks legitimate from the outside with correct name, path, and PID but runs entirely different code. EID 25 should fire because Sysmon detects the in-memory image no longer matches the on-disk PE. Issue triggering revershell from hollowed process context so instead switch payload to launch calc.exe, however still issue spawning it but sysmon triggers on EID 25:
 - msfvenom -p windows/x64/exec CMD=calc.exe -f c --arch x64 --platform windows -b "\x00\x0a\x0d"
+
 | API Call                 | Layer      | Sysmon Event |
 |--------------------------|------------|--------------|
 | CreateProcess(SUSPENDED) | Win32      | —            |

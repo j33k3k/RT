@@ -30,6 +30,24 @@ On Windows 11, when injecting into a process owned by the same user in the same 
 | 0x147a   | VM_WRITE+VM_OP+CREATE_THREAD+DUP+QUERY+SUSPEND      | Full injection with suspend capability     |
 
 
+## Sysmon CallTrace explained
+CallTrace reads right to left with the rightmost entry is where execution started. UNKNOWN in calltrace means the code at that address has no associated PE module with raw code executing from VirtualAllocEx allocated memory and most often shellcode. 
+
+| CallTrace Origin          | Meaning                        | Suspicion  |
+|---------------------------|--------------------------------|------------|
+| someapp.exe+offset        | Named PE module                | Normal     |
+| ntdll.dll+offset          | Thread startup boilerplate     | Normal     |
+| KERNELBASE.dll+offset     | Windows API routing            | Normal     |
+| UNKNOWN(address)          | Anonymous memory               | High       |
+
+| CallTrace Pattern                         | Technique              |
+|-------------------------------------------|------------------------|
+| ntdll ← KERNELBASE ← KERNEL32 ← app.exe   | Normal Win32 API       |
+| ntdll ← KERNELBASE ← app.exe              | Native API (ntdll)     |
+| ntdll ← KERNEL32(CRT) ← app.exe           | Direct Syscall         |
+| ntdll ← KERNELBASE ← KERNEL32 ← UNKNOWN   | Shellcode post-inject  |
+
+
 ## Lab setup
 1. Windows Host running ELK in WSL with local FW rules to push traffic to the host -> WSL
 2. Windows VM with Elastic Agent, Sysmon and sysmonconfig-olaf-filedelete.xml on bridged network
@@ -109,7 +127,7 @@ DWORD GetPID(const wchar_t* procName) {
 }
 ```
 
-## Technique 1. Classic CreateRemoteThread
+## T1. Classic CreateRemoteThread
 Opens a handle to a running process, writes shellcode into its memory space,
 then creates a new thread inside that process to execute it. All through
 documented Win32 API calls in kernel32.dll. Most well-known injection
@@ -298,7 +316,7 @@ Had to add in ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to 
   from anonymous memory. Legitimate code always has a named module in trace.
 
 
-## 2. Direct Native API
+## T2. Direct Native API
 Calls NtCreateThreadEx directly from ntdll.dll instead of going through CreateRemoteThread in kernel32.dll. Internally, CreateRemoteThread is just a wrapper that eventually calls NtCreateThreadEx so the kernel sees the same event. EDRs typically place hooks at the top of each function in kernel32.dll and ntdll.dll. By skipping kernel32.dll entirely you bypass any hook placed on CreateRemoteThread. Sysmon sits in the kernel and should catch the threat creation event regardless.
 | API Call            | Layer      | Sysmon Event |
 |---------------------|------------|--------------|
@@ -497,7 +515,7 @@ DestinationPort: 4444
 DestinationPortName: -"
 
 
-### SYSMON analysis
+### Sysmon Analysis
 | Step | Action                               | Sysmon EID | Rule Triggered          |
 |------|--------------------------------------|------------|-------------------------|
 | 1    | Injector opens handle to Notepad     | EID 10     | ProcessInjectionDelux   |
@@ -516,7 +534,7 @@ DestinationPortName: -"
   EID 8 the injected thread is the one making subsequent API calls. Direct forensic link between thread creation and post-injection activity.
 
 
-## 3. APC Queue Code Injection
+## T3. APC Queue Code Injection
 Threads can execute code asynchronously by leveraging APC queues. It queues a function call to an existing thread in the target process rather than creating a new thread. For APC to execute the target thread must enter an alertable wait state via SleepEx, WaitForSingleObjectEx or similar and cannot force the victim thread to execute the injected code. This variant creates the target process suspended, queues the APC before any user code runs, then resumes. The main thread is alertable by default during initialisation.
 
 | API Call            | Layer      | Sysmon Event |
@@ -672,7 +690,7 @@ footprint.
   anonymous memory. Same fingerprint as T1 and T2.
 
 
-## 3. ProcessHollowing
+## T4. ProcessHollowing
 Process hollowing creates a legitimate process suspended, unmaps its original image from memory, then maps malicious code in its place before resuming. The process looks legitimate from the outside with correct name, path, and PID but runs entirely different code. EID 25 should fire because Sysmon detects the in-memory image no longer matches the on-disk PE. Issue triggering revershell from hollowed process context so instead switch payload to launch calc.exe, however still issue spawning it but sysmon triggers on EID 25:
 - msfvenom -p windows/x64/exec CMD=calc.exe -f c --arch x64 --platform windows -b "\x00\x0a\x0d"
 
@@ -844,7 +862,7 @@ EID 25 fired with Type: Image is replaced, confirms Sysmon detected the in-memor
 - **EID 10** `GrantedAccess: 0x1fffff` injector opens handle to target.
 
 
-## 5. Direct Syscall
+## T5. Direct Syscall
 Direct syscalls bypasses ntdll.dll entirely by executing the syscall instruction directly in your code. EDRs hook ntdll.dll functions in userland to intercept calls but direct syscalls jump straight past those hooks into the kernel. However Sysmon sits in the kernel and sees the same resulting kernel events regardless of how they were triggered.
 
 | API Call                    | Layer          | Sysmon Event |
@@ -1110,8 +1128,8 @@ DestinationPortName: -"
 
 ### Sysmon Analysis 
 Direct syscalls produce identical kernel events as previous techniques as Sysmon kernel callbacks are completely unaffected by userland hook bypass. The key difference vs T1 and T2 is in the
-EID 10 CallTrace and GrantedAccess value. NtOpenProcess via direct syscall enforces exact rights more strictly than Win32 OpenProcess. T5 CallTrace shows injector binary jumping directly without passing
-through ntdll or KERNELBASE. This is a detectable anomaly where legitimate processes always route through ntdll for system calls.
+EID 10 CallTrace and GrantedAccess value. NtOpenProcess via direct syscall enforces exact rights more strictly than Win32 OpenProcess. T5 CallTrace shows KERNELBASE.dll is absent from chain in T1/T2 it appeared between
+ntdll and the injector binary because OpenProcess routes through it. In T5 the syscall jumps directly from the injector into the kernel bypassing KERNELBASE.dll entirely where OpenProcess actually lives. 
 
 | Step | Action                              | Sysmon EID | Rule Triggered          |
 |------|-------------------------------------|------------|-------------------------|
@@ -1134,3 +1152,117 @@ through ntdll or KERNELBASE. This is a detectable anomaly where legitimate proce
   creation event survives complete bypass of userland API stack.
 - **EID 10** `UNKNOWN(000001DE7DB201BC)` shellcode executing from
   anonymous memory. Same fingerprint as all previous techniques.
+
+
+## T6. DLL Injection
+
+
+### Sysmon Data
+1. "CreateRemoteThread detected:
+RuleName: technique_id=T1055,technique_name=Process Injection
+UtcTime: 2026-05-13 13:07:45.537
+SourceProcessGuid: {ED9BFE1B-77A1-6A04-4003-000000000F00}
+SourceProcessId: 12740
+SourceImage: C:\Users\jens\Documents\procInj\t6_dll_injection.exe
+TargetProcessGuid: {ED9BFE1B-7536-6A04-3603-000000000F00}
+TargetProcessId: 13264
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+NewThreadId: 14568
+StartAddress: 0x00007FF9C66A2CD0
+StartModule: C:\WINDOWS\System32\KERNEL32.DLL
+StartFunction: LoadLibraryA
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "Image loaded:
+RuleName: technique_id=T1574.002,technique_name=DLL Side-Loading
+UtcTime: 2026-05-13 13:07:45.612
+ProcessGuid: {ED9BFE1B-7536-6A04-3603-000000000F00}
+ProcessId: 13264
+Image: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+ImageLoaded: C:\temp\evil.dll
+FileVersion: -
+Description: -
+Product: -
+Company: -
+OriginalFileName: -
+Hashes: SHA1=007F10DC2375DF25CC581E4B6479F2D82309A9E9,MD5=D07D362A5955E813ADBBDD216EDB37D7,SHA256=B2D0B6FC749A23336D99615076A9B0E4B445CD35060F4D7212EDF418CCEA1A27,IMPHASH=57D6E7112C8E716CFE2EB0FF9F36763C
+Signed: false
+Signature: -
+SignatureStatus: Unavailable
+User: WIN11\jens"
+
+3. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
+UtcTime: 2026-05-13 13:07:45.654
+SourceProcessGUID: {ED9BFE1B-7536-6A04-3603-000000000F00}
+SourceProcessId: 13264
+SourceThreadId: 14568
+SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+TargetProcessGUID: {ED9BFE1B-77A1-6A04-4103-000000000F00}
+TargetProcessId: 3640
+TargetImage: C:\WINDOWS\system32\rundll32.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+1636b4|C:\WINDOWS\System32\KERNELBASE.dll+8b82d|C:\WINDOWS\System32\KERNELBASE.dll+88d43|C:\WINDOWS\System32\KERNELBASE.dll+888a6|C:\WINDOWS\System32\KERNEL32.DLL+44f14|C:\Temp\evil.dll+10ef|C:\Temp\evil.dll+1248|C:\WINDOWS\SYSTEM32\ntdll.dll+15f98a|C:\WINDOWS\SYSTEM32\ntdll.dll+12d23|C:\WINDOWS\SYSTEM32\ntdll.dll+6fc9c|C:\WINDOWS\SYSTEM32\ntdll.dll+5b0a|C:\WINDOWS\SYSTEM32\ntdll.dll+4c93|C:\WINDOWS\SYSTEM32\ntdll.dll+b6e4|C:\WINDOWS\SYSTEM32\ntdll.dll+b2f0|C:\WINDOWS\SYSTEM32\ntdll.dll+59370|C:\WINDOWS\System32\KERNELBASE.dll+337bf|C:\WINDOWS\System32\KERNELBASE.dll+ee1bd|C:\WINDOWS\System32\KERNEL32.DLL+2e957|C:\WINDOWS\SYSTEM32\ntdll.dll+427c
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+4. "Process Create:
+RuleName: technique_id=T1059.003,technique_name=Windows Command Shell
+UtcTime: 2026-05-13 13:07:46.037
+ProcessGuid: {ED9BFE1B-77A2-6A04-4403-000000000F00}
+ProcessId: 6356
+Image: C:\Windows\System32\cmd.exe
+FileVersion: 10.0.26100.8328 (WinBuild.160101.0800)
+Description: Windows Command Processor
+Product: Microsoft® Windows® Operating System
+Company: Microsoft Corporation
+OriginalFileName: Cmd.Exe
+CommandLine: cmd
+CurrentDirectory: C:\Users\jens\
+User: WIN11\jens
+LogonGuid: {ED9BFE1B-5BCF-6A04-9856-1A0000000000}
+LogonId: 0x1a5698
+TerminalSessionId: 1
+IntegrityLevel: Medium
+Hashes: SHA1=8EFFECCD068002141AEF22B095A52E1D41656C98,MD5=CED4AA0B4CBF72E2520E0A2CCFF79370,SHA256=D5697FEF6995E992B9232A2B19665A297743427316C7225A5B772F0032F20FCA,IMPHASH=B0F049C014592B156EB1FA857E99CEB9
+ParentProcessGuid: {ED9BFE1B-77A1-6A04-4103-000000000F00}
+ParentProcessId: 3640
+ParentImage: C:\Windows\System32\rundll32.exe
+ParentCommandLine: rundll32.exe
+ParentUser: WIN11\jens"
+
+5. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-13 13:07:46.045
+SourceProcessGUID: {ED9BFE1B-77A1-6A04-4103-000000000F00}
+SourceProcessId: 3640
+SourceThreadId: 3852
+SourceImage: C:\WINDOWS\system32\rundll32.exe
+TargetProcessGUID: {ED9BFE1B-77A2-6A04-4403-000000000F00}
+TargetProcessId: 6356
+TargetImage: C:\WINDOWS\system32\cmd.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+1636b4|C:\WINDOWS\System32\KERNELBASE.dll+8b82d|C:\WINDOWS\System32\KERNELBASE.dll+88d43|C:\WINDOWS\System32\KERNELBASE.dll+888a6|C:\WINDOWS\System32\KERNEL32.DLL+44f14|UNKNOWN(00000191BE240195)
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+6. "Network connection detected:
+RuleName: technique_id=T1571,technique_name=Non-Standard Port
+UtcTime: 2026-05-13 13:07:44.004
+ProcessGuid: {ED9BFE1B-77A1-6A04-4103-000000000F00}
+ProcessId: 3640
+Image: C:\WINDOWS\system32\rundll32.exe
+User: WIN11\jens
+Protocol: tcp
+Initiated: true
+SourceIsIpv6: false
+SourceIp: 192.168.32.39
+SourceHostname: -
+SourcePort: 63115
+SourcePortName: -
+DestinationIsIpv6: false
+DestinationIp: 192.168.32.49
+DestinationHostname: -
+DestinationPort: 4444
+DestinationPortName: -"

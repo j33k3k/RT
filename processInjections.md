@@ -482,7 +482,8 @@ DestinationPortName: -"
 
 
 ## 3. APC Queue Code Injection
-Threads can execute code asynchronously by leveraging APC queues. It queues a function call to an existing thread in the target process rather than creating a new thread. For APC to execute the target thread must enter an alertable wait state via SleepEx, WaitForSingleObjectEx or similar and cannot force the victim thread to execute the injected code.
+Threads can execute code asynchronously by leveraging APC queues. It queues a function call to an existing thread in the target process rather than creating a new thread. For APC to execute the target thread must enter an alertable wait state via SleepEx, WaitForSingleObjectEx or similar and cannot force the victim thread to execute the injected code. This variant creates the target process suspended, queues the APC before any user code runs, then resumes. The main thread is alertable by default during initialisation.
+APC execution
 | API Call            | Layer      | Sysmon Event |
 |---------------------|------------|--------------|
 | OpenProcess()       | Win32      | EID 10       |
@@ -492,7 +493,7 @@ Threads can execute code asynchronously by leveraging APC queues. It queues a fu
 | QueueUserAPC()      | Win32      | -            |
 
 ```
-// t3_apc_earlybird.cpp
+// t3_apc_injection.cpp
 #include "common.h"
 
 int main() {
@@ -542,3 +543,99 @@ int main() {
 ```
 
 ### Sysmon Data
+1."Process accessed:
+RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
+UtcTime: 2026-05-13 08:36:47.379
+SourceProcessGUID: {ED9BFE1B-381E-6A04-C402-000000000C00}
+SourceProcessId: 10708
+SourceThreadId: 3400
+SourceImage: C:\Users\jens\Documents\procInj\t3_apc_injection.exe
+TargetProcessGUID: {ED9BFE1B-381F-6A04-C702-000000000C00}
+TargetProcessId: 3380
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+163514|C:\WINDOWS\System32\KERNELBASE.dll+b0c3a|C:\WINDOWS\System32\KERNELBASE.dll+ae296|C:\WINDOWS\System32\KERNEL32.DLL+3c6e4|C:\Users\jens\Documents\procInj\t3_apc_injection.exe+1601|C:\Users\jens\Documents\procInj\t3_apc_injection.exe+10d9|C:\Users\jens\Documents\procInj\t3_apc_injection.exe+1456|C:\WINDOWS\System32\KERNEL32.DLL+2e8d7|C:\WINDOWS\SYSTEM32\ntdll.dll+8c3fc
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "Process Create:
+RuleName: technique_id=T1059.003,technique_name=Windows Command Shell
+UtcTime: 2026-05-13 08:36:47.815
+ProcessGuid: {ED9BFE1B-381F-6A04-C802-000000000C00}
+ProcessId: 11436
+Image: C:\Windows\System32\cmd.exe
+FileVersion: 10.0.26100.8115 (WinBuild.160101.0800)
+Description: Windows Command Processor
+Product: Microsoft® Windows® Operating System
+Company: Microsoft Corporation
+OriginalFileName: Cmd.Exe
+CommandLine: cmd
+CurrentDirectory: C:\Users\jens\Documents\procInj\
+User: WIN11\jens
+LogonGuid: {ED9BFE1B-2C5D-6A04-436B-060000000000}
+LogonId: 0x66b43
+TerminalSessionId: 1
+IntegrityLevel: Medium
+Hashes: SHA1=2EDE04B00B744D0D2D5614E83997022CC3EF3656,MD5=77F0062F490BCC7023763A422E561945,SHA256=14CC8AB1DCF0D9F19E8FB82DEB547CF8C462C56A0E43F7ADDC02641AB3C81651,IMPHASH=B0F049C014592B156EB1FA857E99CEB9
+ParentProcessGuid: {ED9BFE1B-381F-6A04-C702-000000000C00}
+ParentProcessId: 3380
+ParentImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+ParentCommandLine: ""C:\Windows\System32\notepad.exe""
+ParentUser: WIN11\jens"
+
+3. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-13 08:36:47.840
+SourceProcessGUID: {ED9BFE1B-381F-6A04-C702-000000000C00}
+SourceProcessId: 3380
+SourceThreadId: 15216
+SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+TargetProcessGUID: {ED9BFE1B-381F-6A04-C802-000000000C00}
+TargetProcessId: 11436
+TargetImage: C:\WINDOWS\system32\cmd.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+163514|C:\WINDOWS\System32\KERNELBASE.dll+b0c3a|C:\WINDOWS\System32\KERNELBASE.dll+ae153|C:\WINDOWS\System32\KERNELBASE.dll+adcb6|C:\WINDOWS\System32\KERNEL32.DLL+44fd4|UNKNOWN(000002EDA1C401BC)
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+4. "Network connection detected:
+RuleName: technique_id=T1571,technique_name=Non-Standard Port
+UtcTime: 2026-05-13 08:36:55.124
+ProcessGuid: {ED9BFE1B-381F-6A04-C702-000000000C00}
+ProcessId: 3380
+Image: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+User: WIN11\jens
+Protocol: tcp
+Initiated: true
+SourceIsIpv6: false
+SourceIp: 192.168.32.39
+SourceHostname: -
+SourcePort: 52100
+SourcePortName: -
+DestinationIsIpv6: false
+DestinationIp: 192.168.32.49
+DestinationHostname: -
+DestinationPort: 4444
+DestinationPortName: -"
+
+### Sysmon Analysis
+No EID 8 which confirmed detection gap for APC injection as no thread is created so Sysmon CreateRemoteThread instrumentation never
+fires. Detection relies entirely on EID 10 from process handle open where QueueUserAPC leaves no direct Sysmon
+footprint.
+| Step | Action                                  | Sysmon EID | Rule Triggered          |
+|------|-----------------------------------------|------------|-------------------------|
+| 1    | Injector opens handle to Notepad        | EID 10     | ProcessInjectionDelux   |
+| 2    | Shellcode written to remote memory      | —          | —                       |
+| 3    | APC queued to suspended main thread     | —          | —                       |
+| 4    | Thread resumed — APC executes           | —          | —                       |
+| 5    | Shellcode opens handle to cmd.exe       | EID 10     | ProcessInjectionDelux   |
+
+### Key Indicators
+- **EID 8 absent** confirmed gap. QueueUserAPC reuses existing thread, cannot rely on EID 8 for APC detection.
+- **EID 10** `GrantedAccess: 0x1fffff` only signal at injection time.
+- **EID 10** `UNKNOWN(000002EDA1C401BC)` shellcode executing from
+  anonymous memory. Same fingerprint as T1 and T2.
+
+
+## 3. ProcessHollowing
+Process hollowing creates a legitimate process suspended, unmaps its original image from memory, then maps malicious code in its place before resuming. The process looks legitimate from the outside with correct name, path, and PID but runs entirely different code. EID 25 should fire because Sysmon detects the in-memory image no longer matches the on-disk PE.

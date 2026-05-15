@@ -52,7 +52,6 @@ Process created or image modified
 <img width="942" height="712" alt="image" src="https://github.com/user-attachments/assets/65977293-a5d1-43cc-8dab-a8c0f33aa17d" />
 
 ## Process Access Rights
-On Windows 11, when injecting into a process owned by the same user in the same session, the kernel automatically promotes the granted access mask to PROCESS_ALL_ACCESS (0x1fffff) regardless of what the caller requested. So even with minimum rights in exploit, Sysmon logged 0x1fffff.
 
 | Value    | Breakdown                                                | Technique / Context                         |
 |----------|----------------------------------------------------------|---------------------------------------------|

@@ -1,8 +1,54 @@
 # Process injection techniques with Sysmon analysis
-What each Sysmon Event ID catches:
-- Event ID 8 CreateRemoteThread: Fires when a thread is created in another process. Catches: classic CRT, NtCreateThreadEx (sometimes), RtlCreateUserThread. Does NOT fire for APC injection since no thread is created instead an existing thread is targeted.
-- Event ID 10 ProcessAccess: Fires when a process opens a handle to another process with specific access rights (PROCESS_VM_WRITE, PROCESS_VM_READ, PROCESS_CREATE_THREAD). Virtually every injection technique requires a handle to the target process.
-- Event ID 25 ProcessTampering: Fires specifically on image replacement or process hollowing when the mapped image in memory no longer matches the file on disk. Catches: hollowing, module stomping, some reflective DLL variants.
+Sysmon is a kernel driver (SysmonDrv.sys) that registers callbacks directly with the Windows kernel. It does not monitor userland DLLs like kernel32.dll or ntdll.dll. It monitors kernel objects and events
+at the lowest possible level below any userland bypass.
+
+## What each Sysmon Event ID catches
+
+### EID 7 — Image Loaded
+**Kernel callback:** `PsSetLoadImageNotifyRoutine`
+
+The Windows kernel calls
+this routine every time any PE image (EXE, DLL, driver) is mapped
+into a process address space. Fires at the memory mapping level completely independent of which API was used to load the image.
+LoadLibrary, LdrLoadDll, manual mapping all produce the same callback.
+LoadLibraryA() called:
+→ ntdll LdrLoadDll maps image into memory
+→ kernel notifies PsSetLoadImageNotifyRoutine
+→ Sysmon logs EID 7 with image path and hashes
+
+### EID 8 — CreateRemoteThread
+**Kernel callback:** `PsSetCreateThreadNotifyRoutine`
+
+The Windows kernel calls this routine every time a thread object is created anywhere in the system. Fires at kernel object creation completely independent of
+whether CreateRemoteThread, NtCreateThreadEx, or a direct syscall was used. All produce identical kernel thread objects.
+Any thread creation API called:
+→ syscall reaches kernel
+→ kernel creates thread object
+→ kernel notifies PsSetCreateThreadNotifyRoutine
+→ Sysmon checks if thread is in a different process
+→ if cross-process: logs EID 8
+
+### EID 10 — ProcessAccess
+**Kernel callback:** `ObRegisterCallbacks`
+
+The Windows Object Manager calls this routine every time a handle to a process object is opened or duplicated. Fires at the handle creation level in the object manager completely independent of which API opened the handle.
+OpenProcess, NtOpenProcess, direct syscall all produce the same object manager notification.
+Any OpenProcess call made:
+→ syscall reaches kernel object manager
+→ object manager creates handle
+→ object manager notifies ObRegisterCallbacks
+→ Sysmon logs EID 10 with granted access mask
+
+### EID 25 — ProcessTampering
+**Kernel callback:** `PsSetCreateProcessNotifyRoutineEx`
+
+Extended process notify routine that receives additional information about process state. Sysmon compares the in-memory image of a process against the on-disk file it was loaded from. Fires when the mapped image in memory no longer matches the file on disk.
+Process created or image modified
+→ kernel notifies PsSetCreateProcessNotifyRoutineEx
+→ Sysmon reads mapped image from memory
+→ Sysmon reads original file from disk
+→ if mismatch: logs EID 25 Type: Image is replaced
+
 <img width="942" height="712" alt="image" src="https://github.com/user-attachments/assets/65977293-a5d1-43cc-8dab-a8c0f33aa17d" />
 
 ## Process Access Rights

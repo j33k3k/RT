@@ -1329,8 +1329,15 @@ DestinationPortName: -"
 
 
 ### Sysmon Analysis
-EID 10 for t6_dll_injection.exe opening handle to Notepad is not present in the events. Only post-injection activity visible in EID 10. Will need to check config that it includes
-handle opens with PAGE_READWRITE allocation as DLL path uses RW not RWX.
+EID 10 for t6_dll_injection.exe opening handle to Notepad was not present in the events at first. Only post-injection activity visible in EID 10. Checked GrantedAccess and it was 0x042A which is:
+```
+PROCESS_VM_WRITE          0x0020
+PROCESS_VM_OPERATION      0x0008
+PROCESS_CREATE_THREAD     0x0002
+PROCESS_QUERY_INFORMATION 0x0400
+Total                     0x042a
+```
+Updated ProcessInjectionDelux config in Sysmon EID 10 to include 0x042a, 0x043a and 0x0428 to cover variants without the PROCESS_QUERY_LIMITED_INFORMATION bit. Now GrantedAccess looks for include on (0x1FFFFF;0x1F0FFF;0x1F1FFF;0x1F2FFF;0x1F3FFF;0x143A;0x147A;0x047A;0x1410;0x1438;0x0478;0x1010;0x042A;0x043A;0x0428)
 
 | Step | Action                                  | Sysmon EID | Rule Triggered           |
 |------|-----------------------------------------|------------|--------------------------|

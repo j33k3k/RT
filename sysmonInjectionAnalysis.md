@@ -1326,7 +1326,32 @@ CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+1636b4|C:\WINDOWS\System32\KERNELBASE.d
 SourceUser: WIN11\jens
 TargetUser: WIN11\jens"
 
-6. "Network connection detected:
+6. "Process Create:
+RuleName: technique_id=T1059.003,technique_name=Windows Command Shell
+UtcTime: 2026-05-15 12:30:01.624
+ProcessGuid: {ED9BFE1B-11C9-6A07-2F02-000000001200}
+ProcessId: 12252
+Image: C:\Windows\System32\cmd.exe
+FileVersion: 10.0.26100.8328 (WinBuild.160101.0800)
+Description: Windows Command Processor
+Product: Microsoft® Windows® Operating System
+Company: Microsoft Corporation
+OriginalFileName: Cmd.Exe
+CommandLine: cmd
+CurrentDirectory: C:\Users\jens\Downloads\Sysmon\
+User: WIN11\jens
+LogonGuid: {ED9BFE1B-0816-6A07-E88D-0E0000000000}
+LogonId: 0xe8de8
+TerminalSessionId: 1
+IntegrityLevel: High
+Hashes: SHA1=8EFFECCD068002141AEF22B095A52E1D41656C98,MD5=CED4AA0B4CBF72E2520E0A2CCFF79370,SHA256=D5697FEF6995E992B9232A2B19665A297743427316C7225A5B772F0032F20FCA,IMPHASH=B0F049C014592B156EB1FA857E99CEB9
+ParentProcessGuid: {ED9BFE1B-11C9-6A07-2E02-000000001200}
+ParentProcessId: 13792
+ParentImage: C:\Windows\System32\rundll32.exe
+ParentCommandLine: rundll32.exe
+ParentUser: WIN11\jens"
+
+7. "Network connection detected:
 RuleName: technique_id=T1571,technique_name=Non-Standard Port
 UtcTime: 2026-05-15 12:30:01.264
 ProcessGuid: {ED9BFE1B-11C9-6A07-2E02-000000001200}
@@ -1375,3 +1400,106 @@ Updated ProcessInjectionDelux config in Sysmon EID 10 to include 0x102a but also
 - **EID 10** `UNKNOWN(00000191BE240195)` shellcode inside evil.dll
   executing from anonymous memory. DLL loaded itself then unpacked
   shellcode into allocated memory.
+
+
+## Reflective DLL Injection
+Loads a DLL into a target process without using LoadLibraryA. Instead the DLL contains a custom loader function that maps itself into memory, resolves its own imports and relocations, then executes. The key detection difference from T6 is that no LoadLibrary call is made and the DLL never appears as a formally loaded module through the Windows loader. Used https://github.com/stephenfewer/ReflectiveDLLInjection with Metasploit module "windows/manage/reflective_dll_inject" to run this lab. It is assumeed that the attacker has already gained a meterpreter shell from the victim system before running this. 
+| API Call                  | Layer  | Sysmon Event          |
+|---------------------------|--------|-----------------------|
+| OpenProcess()             | Win32  | EID 10                |
+| VirtualAllocEx()          | Win32  | —                     |
+| WriteProcessMemory()      | Win32  | —                     |
+| CreateRemoteThread()      | Win32  | EID 8                 |
+| ReflectiveLoader()        | Custom | — (self-mapping)      |
+
+<img width="1840" height="1162" alt="image" src="https://github.com/user-attachments/assets/52af37b7-98ff-4592-90bb-041d70e78c51" />
+
+### Sysmon Data for Metasploit session
+1. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-15 14:21:28.893
+SourceProcessGUID: {ED9BFE1B-273D-6A07-4D03-000000001200}
+SourceProcessId: 7508
+SourceThreadId: 14128
+SourceImage: C:\Users\jens\Documents\procInj\meter.exe
+TargetProcessGUID: {ED9BFE1B-28A4-6A07-5503-000000001200}
+TargetProcessId: 6576
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+GrantedAccess: 0x1410
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+162164|C:\WINDOWS\System32\KERNELBASE.dll+360c6|UNKNOWN(0000000000CBDDFC)
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-15 14:21:28.897
+SourceProcessGUID: {ED9BFE1B-273D-6A07-4D03-000000001200}
+SourceProcessId: 7508
+SourceThreadId: 14128
+SourceImage: C:\Users\jens\Documents\procInj\meter.exe
+TargetProcessGUID: {ED9BFE1B-2BA8-6A07-6E03-000000001200}
+TargetProcessId: 3244
+TargetImage: C:\WINDOWS\system32\svchost.exe
+GrantedAccess: 0x1410
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+162164|C:\WINDOWS\System32\KERNELBASE.dll+360c6|UNKNOWN(0000000000CBDDFC)
+SourceUser: WIN11\jens
+TargetUser: NT instans\SYSTEM"
+
+3. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-15 14:21:29.013
+SourceProcessGUID: {ED9BFE1B-273D-6A07-4D03-000000001200}
+SourceProcessId: 7508
+SourceThreadId: 6420
+SourceImage: C:\Users\jens\Documents\procInj\meter.exe
+TargetProcessGUID: {ED9BFE1B-28A4-6A07-5503-000000001200}
+TargetProcessId: 6576
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+GrantedAccess: 0x3fff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+162164|C:\WINDOWS\System32\KERNELBASE.dll+360c6|UNKNOWN(0000000000CBBCEF)
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+4. "CreateRemoteThread detected:
+RuleName: technique_id=T1055,technique_name=Process Injection
+UtcTime: 2026-05-15 14:21:29.545
+SourceProcessGuid: {ED9BFE1B-273D-6A07-4D03-000000001200}
+SourceProcessId: 7508
+SourceImage: C:\Users\jens\Documents\procInj\meter.exe
+TargetProcessGuid: {ED9BFE1B-28A4-6A07-5503-000000001200}
+TargetProcessId: 6576
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+NewThreadId: 6784
+StartAddress: 0x0000019F7C320448
+StartModule: -
+StartFunction: -
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+## Sysmon Analysis
+EID 7 completely absent confirmed detection gap for reflective DLL injection as Windows loader never called so PsSetLoadImageNotifyRoutine. No DLL path, no hashes, no signature info logged.
+Two different GrantedAccess values observed as Metasploit uses multiple handle opens with different rights for reconnaissance then injection. Bitvalue 0x3fff should be added to config. Notable ran command ps in Metasploit which caused meter.exe to open handle to svchost.exe. Reflective DLL injection is significantly stealthier than standard T6 DLL injection from an EID 7 perspective. Detection relies on EID 8 with "StartModule: -" and EID 10 UNKNOWN in CallTrace.
+
+| Step | Action                                   | Sysmon EID | Rule Triggered           |
+|------|------------------------------------------|------------|--------------------------|
+| 1    | meter.exe opens handle to Notepad        | EID 10     | DLL Injection            |
+| 2    | meter.exe opens handle to svchost        | EID 10     | DLL Injection            |
+| 3    | meter.exe opens elevated handle to Notepad| EID 10    | DLL Injection            |
+| 4    | DLL bytes written to remote memory       | -          | -                        |
+| 5    | CreateRemoteThread(ReflectiveLoader)     | EID 8      | T1055 Process Injection  |
+| 6    | ReflectiveLoader self-maps DLL           | -          | -                        |
+
+### Key Indicators
+- **EID 8** `StartModule: -` thread starts from anonymous memory.
+  ReflectiveLoader address is in RWX allocated memory not a named
+  module. Identical fingerprint to T1/T2/T5 shellcode injection.
+- **EID 7 absent** confirmed detection gap. Reflective loading
+  bypasses Windows loader entirely.
+- **EID 10** `GrantedAccess: 0x1410`  VM_WRITE+VM_READ+VM_OP+QUERY.
+  Metasploit uses minimal rights for initial reconnaissance handle.
+- **EID 10** `GrantedAccess: 0x3fff` — elevated rights for injection
+  handle. New value not previously seen in lab.
+- **EID 10** `UNKNOWN(0000000000CBDDFC)` Meterpreter shellcode
+  executing from anonymous memory making API calls.
+- **EID 10** svchost.exe targeted Meterpreter process enumeration
+  for potential migration. 

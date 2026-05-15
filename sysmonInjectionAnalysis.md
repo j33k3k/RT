@@ -1501,5 +1501,4 @@ Two different GrantedAccess values observed as Metasploit uses multiple handle o
   handle. New value not previously seen in lab.
 - **EID 10** `UNKNOWN(0000000000CBDDFC)` Meterpreter shellcode
   executing from anonymous memory making API calls.
-- **EID 10** svchost.exe targeted Meterpreter process enumeration
-  for potential migration. 
+- **EID 10** svchost.exe targeted by Meterpreter for process enumeration. 

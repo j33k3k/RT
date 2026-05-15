@@ -1237,110 +1237,109 @@ anonymous memory to kernel32.dll.
 | LoadLibraryA()        | Win32 | EID 7 (fires in target)   |
 
 
-
 ### Sysmon Data
-1. "CreateRemoteThread detected:
-RuleName: technique_id=T1055,technique_name=Process Injection
-UtcTime: 2026-05-13 13:07:45.537
-SourceProcessGuid: {ED9BFE1B-77A1-6A04-4003-000000000F00}
-SourceProcessId: 12740
+1."Process accessed:
+RuleName: -
+UtcTime: 2026-05-15 12:30:01.559
+SourceProcessGUID: {ED9BFE1B-11C9-6A07-2D02-000000001200}
+SourceProcessId: 9732
+SourceThreadId: 12320
 SourceImage: C:\Users\jens\Documents\procInj\t6_dll_injection.exe
-TargetProcessGuid: {ED9BFE1B-7536-6A04-3603-000000000F00}
-TargetProcessId: 13264
+TargetProcessGUID: {ED9BFE1B-11B4-6A07-2702-000000001200}
+TargetProcessId: 8488
 TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
-NewThreadId: 14568
-StartAddress: 0x00007FF9C66A2CD0
+GrantedAccess: 0x102a
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+162164|C:\WINDOWS\System32\KERNELBASE.dll+360c6|C:\Users\jens\Documents\procInj\t6_dll_injection.exe+15f7|C:\Users\jens\Documents\procInj\t6_dll_injection.exe+10d9|C:\Users\jens\Documents\procInj\t6_dll_injection.exe+1456|C:\WINDOWS\System32\KERNEL32.DLL+2e957|C:\WINDOWS\SYSTEM32\ntdll.dll+427c
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "CreateRemoteThread detected:
+RuleName: technique_id=T1055,technique_name=Process Injection
+UtcTime: 2026-05-15 12:30:01.568
+SourceProcessGuid: {ED9BFE1B-11C9-6A07-2D02-000000001200}
+SourceProcessId: 9732
+SourceImage: C:\Users\jens\Documents\procInj\t6_dll_injection.exe
+TargetProcessGuid: {ED9BFE1B-11B4-6A07-2702-000000001200}
+TargetProcessId: 8488
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+NewThreadId: 5876
+StartAddress: 0x00007FFFCB662CD0
 StartModule: C:\WINDOWS\System32\KERNEL32.DLL
 StartFunction: LoadLibraryA
 SourceUser: WIN11\jens
 TargetUser: WIN11\jens"
 
-2. "Image loaded:
+3. "Image loaded:
 RuleName: technique_id=T1574.002,technique_name=DLL Side-Loading
-UtcTime: 2026-05-13 13:07:45.612
-ProcessGuid: {ED9BFE1B-7536-6A04-3603-000000000F00}
-ProcessId: 13264
+UtcTime: 2026-05-15 12:30:01.570
+ProcessGuid: {ED9BFE1B-11B4-6A07-2702-000000001200}
+ProcessId: 8488
 Image: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
-ImageLoaded: C:\temp\evil.dll
+ImageLoaded: C:\Users\jens\Documents\procInj\evil.dll
 FileVersion: -
 Description: -
 Product: -
 Company: -
 OriginalFileName: -
-Hashes: SHA1=007F10DC2375DF25CC581E4B6479F2D82309A9E9,MD5=D07D362A5955E813ADBBDD216EDB37D7,SHA256=B2D0B6FC749A23336D99615076A9B0E4B445CD35060F4D7212EDF418CCEA1A27,IMPHASH=57D6E7112C8E716CFE2EB0FF9F36763C
+Hashes: SHA1=ED5ED0DA134DD336D31ED412B6AA1AD5D9A5B534,MD5=7017E650A3A097CB6932206B8A82E1C9,SHA256=B4F00DB66CFDFABF31CDE5263A4772E1E4B259060A6B0B11304266C207DCD8C8,IMPHASH=57D6E7112C8E716CFE2EB0FF9F36763C
 Signed: false
 Signature: -
 SignatureStatus: Unavailable
 User: WIN11\jens"
 
-3. "Process accessed:
-RuleName: technique_id=T1055.001,technique_name=ProcessInjectionDelux
-UtcTime: 2026-05-13 13:07:45.654
-SourceProcessGUID: {ED9BFE1B-7536-6A04-3603-000000000F00}
-SourceProcessId: 13264
-SourceThreadId: 14568
-SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
-TargetProcessGUID: {ED9BFE1B-77A1-6A04-4103-000000000F00}
-TargetProcessId: 3640
-TargetImage: C:\WINDOWS\system32\rundll32.exe
-GrantedAccess: 0x1fffff
-CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+1636b4|C:\WINDOWS\System32\KERNELBASE.dll+8b82d|C:\WINDOWS\System32\KERNELBASE.dll+88d43|C:\WINDOWS\System32\KERNELBASE.dll+888a6|C:\WINDOWS\System32\KERNEL32.DLL+44f14|C:\Temp\evil.dll+10ef|C:\Temp\evil.dll+1248|C:\WINDOWS\SYSTEM32\ntdll.dll+15f98a|C:\WINDOWS\SYSTEM32\ntdll.dll+12d23|C:\WINDOWS\SYSTEM32\ntdll.dll+6fc9c|C:\WINDOWS\SYSTEM32\ntdll.dll+5b0a|C:\WINDOWS\SYSTEM32\ntdll.dll+4c93|C:\WINDOWS\SYSTEM32\ntdll.dll+b6e4|C:\WINDOWS\SYSTEM32\ntdll.dll+b2f0|C:\WINDOWS\SYSTEM32\ntdll.dll+59370|C:\WINDOWS\System32\KERNELBASE.dll+337bf|C:\WINDOWS\System32\KERNELBASE.dll+ee1bd|C:\WINDOWS\System32\KERNEL32.DLL+2e957|C:\WINDOWS\SYSTEM32\ntdll.dll+427c
-SourceUser: WIN11\jens
-TargetUser: WIN11\jens"
-
 4. "Process Create:
-RuleName: technique_id=T1059.003,technique_name=Windows Command Shell
-UtcTime: 2026-05-13 13:07:46.037
-ProcessGuid: {ED9BFE1B-77A2-6A04-4403-000000000F00}
-ProcessId: 6356
-Image: C:\Windows\System32\cmd.exe
+RuleName: technique_id=T1218.011,technique_name=rundll32.exe
+UtcTime: 2026-05-15 12:30:01.574
+ProcessGuid: {ED9BFE1B-11C9-6A07-2E02-000000001200}
+ProcessId: 13792
+Image: C:\Windows\System32\rundll32.exe
 FileVersion: 10.0.26100.8328 (WinBuild.160101.0800)
-Description: Windows Command Processor
+Description: Windows host process (Rundll32)
 Product: Microsoft® Windows® Operating System
 Company: Microsoft Corporation
-OriginalFileName: Cmd.Exe
-CommandLine: cmd
-CurrentDirectory: C:\Users\jens\
+OriginalFileName: RUNDLL32.EXE
+CommandLine: rundll32.exe
+CurrentDirectory: C:\Users\jens\Downloads\Sysmon\
 User: WIN11\jens
-LogonGuid: {ED9BFE1B-5BCF-6A04-9856-1A0000000000}
-LogonId: 0x1a5698
+LogonGuid: {ED9BFE1B-0816-6A07-E88D-0E0000000000}
+LogonId: 0xe8de8
 TerminalSessionId: 1
-IntegrityLevel: Medium
-Hashes: SHA1=8EFFECCD068002141AEF22B095A52E1D41656C98,MD5=CED4AA0B4CBF72E2520E0A2CCFF79370,SHA256=D5697FEF6995E992B9232A2B19665A297743427316C7225A5B772F0032F20FCA,IMPHASH=B0F049C014592B156EB1FA857E99CEB9
-ParentProcessGuid: {ED9BFE1B-77A1-6A04-4103-000000000F00}
-ParentProcessId: 3640
-ParentImage: C:\Windows\System32\rundll32.exe
-ParentCommandLine: rundll32.exe
+IntegrityLevel: High
+Hashes: SHA1=6B4C923EA1962AD6D589CB37DFB72219ECDBE909,MD5=20CC346F589DF2537A759DA1F8020B85,SHA256=4D90FFF3E33BF3CB2BEA5E08E648732503A3116F8C26359D39CB1DAA6E29A964,IMPHASH=C8B70D465C35D895C4171BAF042BB63A
+ParentProcessGuid: {ED9BFE1B-11B4-6A07-2702-000000001200}
+ParentProcessId: 8488
+ParentImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+ParentCommandLine: ""C:\WINDOWS\system32\notepad.exe"" 
 ParentUser: WIN11\jens"
 
 5. "Process accessed:
-RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
-UtcTime: 2026-05-13 13:07:46.045
-SourceProcessGUID: {ED9BFE1B-77A1-6A04-4103-000000000F00}
-SourceProcessId: 3640
-SourceThreadId: 3852
-SourceImage: C:\WINDOWS\system32\rundll32.exe
-TargetProcessGUID: {ED9BFE1B-77A2-6A04-4403-000000000F00}
-TargetProcessId: 6356
-TargetImage: C:\WINDOWS\system32\cmd.exe
+RuleName: -
+UtcTime: 2026-05-15 12:30:01.579
+SourceProcessGUID: {ED9BFE1B-11B4-6A07-2702-000000001200}
+SourceProcessId: 8488
+SourceThreadId: 5876
+SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+TargetProcessGUID: {ED9BFE1B-11C9-6A07-2E02-000000001200}
+TargetProcessId: 13792
+TargetImage: C:\WINDOWS\system32\rundll32.exe
 GrantedAccess: 0x1fffff
-CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+1636b4|C:\WINDOWS\System32\KERNELBASE.dll+8b82d|C:\WINDOWS\System32\KERNELBASE.dll+88d43|C:\WINDOWS\System32\KERNELBASE.dll+888a6|C:\WINDOWS\System32\KERNEL32.DLL+44f14|UNKNOWN(00000191BE240195)
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+1636b4|C:\WINDOWS\System32\KERNELBASE.dll+8b82d|C:\WINDOWS\System32\KERNELBASE.dll+88d43|C:\WINDOWS\System32\KERNELBASE.dll+888a6|C:\WINDOWS\System32\KERNEL32.DLL+44f14|C:\Users\jens\Documents\procInj\evil.dll+10ef|C:\Users\jens\Documents\procInj\evil.dll+1248|C:\WINDOWS\SYSTEM32\ntdll.dll+15f98a|C:\WINDOWS\SYSTEM32\ntdll.dll+12d23|C:\WINDOWS\SYSTEM32\ntdll.dll+6fc9c|C:\WINDOWS\SYSTEM32\ntdll.dll+5b0a|C:\WINDOWS\SYSTEM32\ntdll.dll+4c93|C:\WINDOWS\SYSTEM32\ntdll.dll+b6e4|C:\WINDOWS\SYSTEM32\ntdll.dll+b2f0|C:\WINDOWS\SYSTEM32\ntdll.dll+59370|C:\WINDOWS\System32\KERNELBASE.dll+337bf|C:\WINDOWS\System32\KERNELBASE.dll+ee1bd|C:\WINDOWS\System32\KERNEL32.DLL+2e957|C:\WINDOWS\SYSTEM32\ntdll.dll+427c
 SourceUser: WIN11\jens
 TargetUser: WIN11\jens"
 
 6. "Network connection detected:
 RuleName: technique_id=T1571,technique_name=Non-Standard Port
-UtcTime: 2026-05-13 13:07:44.004
-ProcessGuid: {ED9BFE1B-77A1-6A04-4103-000000000F00}
-ProcessId: 3640
+UtcTime: 2026-05-15 12:30:01.264
+ProcessGuid: {ED9BFE1B-11C9-6A07-2E02-000000001200}
+ProcessId: 13792
 Image: C:\WINDOWS\system32\rundll32.exe
 User: WIN11\jens
 Protocol: tcp
 Initiated: true
 SourceIsIpv6: false
-SourceIp: 192.168.32.39
+SourceIp: 192.168.32.12
 SourceHostname: -
-SourcePort: 63115
+SourcePort: 50972
 SourcePortName: -
 DestinationIsIpv6: false
 DestinationIp: 192.168.32.49
@@ -1348,9 +1347,8 @@ DestinationHostname: -
 DestinationPort: 4444
 DestinationPortName: -"
 
-
 ### Sysmon Analysis
-EID 10 for t6_dll_injection.exe opening handle to Notepad was not present in the events at first. Only post-injection activity visible in EID 10. Checked GrantedAccess and it was 0x102a which is:
+EID 10 for t6_dll_injection.exe opening handle to Notepad was not present in the events at first tries. Only post-injection activity visible in EID 10. Checked GrantedAccess and it was generating 0x102a which is:
 ```
 PROCESS_VM_WRITE          0x0020
 PROCESS_VM_OPERATION      0x0008
@@ -1358,7 +1356,7 @@ PROCESS_CREATE_THREAD     0x0002
 PROCESS_QUERY_LIMITED_INFORMATION 0x1000
 Total                     0x102a
 ```
-Updated ProcessInjectionDelux config in Sysmon EID 10 to include 0x102a but also 0x042a, 0x043a and 0x0428 to cover variants without the PROCESS_QUERY_LIMITED_INFORMATION bit. Now GrantedAccess looks for include on (0x1FFFFF;0x1F0FFF;0x1F1FFF;0x1F2FFF;0x1F3FFF;0x143A;0x147A;0x047A;0x1410;0x1438;0x0478;0x1010;0x042A;0x43A;0x0428;0x102A)
+Updated ProcessInjectionDelux config in Sysmon EID 10 to include 0x102a but also 0x042a, 0x043a and 0x0428 to cover variants with the PROCESS_QUERY_LIMITED_INFORMATION bit. Now GrantedAccess looks for include on (0x1FFFFF;0x1F0FFF;0x1F1FFF;0x1F2FFF;0x1F3FFF;0x143A;0x147A;0x047A;0x1410;0x1438;0x0478;0x1010;0x042A;0x43A;0x0428;0x102A). Will need to create specific include filters else it will be noisy.
 
 | Step | Action                                  | Sysmon EID | Rule Triggered           |
 |------|-----------------------------------------|------------|--------------------------|
@@ -1371,7 +1369,7 @@ Updated ProcessInjectionDelux config in Sysmon EID 10 to include 0x102a but also
 ### Key Indicators
 - **EID 8** `StartModule: kernel32.dll` thread starts from named
   legitimate module. StartFunction: LoadLibraryA visible strong DLL injection indicator.
-- **EID 7** `ImageLoaded: C:\temp\evil.dll` unsigned DLL loaded from
+- **EID 7** `ImageLoaded: C:\Users\jens\Documents\procInj\evil.dll` unsigned DLL loaded from
   suspicious path.
 - **EID 10** `CallTrace: evil.dll+10ef` named DLL module visible in
   call trace. Different from T1-T5 where UNKNOWN appeared.

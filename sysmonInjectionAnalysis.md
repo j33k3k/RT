@@ -53,28 +53,49 @@ Process created or image modified
 
 ## Process Access Rights
 On Windows 11, when injecting into a process owned by the same user in the same session, the kernel automatically promotes the granted access mask to PROCESS_ALL_ACCESS (0x1fffff) regardless of what the caller requested. So even with minimum rights in exploit, Sysmon logged 0x1fffff.
-| Value    | Breakdown                                           | Technique / Context                        |
-|----------|-----------------------------------------------------|--------------------------------------------|
-| 0x1fffff | PROCESS_ALL_ACCESS                                  | Lazy injectors, lab code, commodity malware|
-| 0x143a   | VM_WRITE+VM_OP+CREATE_THREAD+QUERY                  | Classic CRT injection minimum              |
-| 0x1410   | VM_WRITE+VM_READ+VM_OP                              | Memory write, no thread creation           |
-| 0x1010   | VM_READ+QUERY_LIMITED                               | Reconnaissance, credential dumping         |
-| 0x0040   | DUP_HANDLE                                          | Handle duplication attacks                 |
-| 0x0800   | SUSPEND_RESUME                                      | Thread hijacking, context manipulation     |
-| 0x0010   | VM_READ only                                        | Memory scraping, credential theft          |
-| 0x0020   | VM_WRITE only                                       | Targeted memory patch                      |
-| 0x0400   | QUERY_INFORMATION only                              | Process reconnaissance                     |
-| 0x1000   | QUERY_LIMITED_INFORMATION                           | Stealthy enumeration                       |
-| 0x047a   | VM_WRITE+VM_OP+CREATE_THREAD+DUP_HANDLE             | Injection with handle duplication          |
-| 0x1f0fff | ALL_ACCESS older Windows builds                     | Pre-Win8 PROCESS_ALL_ACCESS variant        |
-| 0x1f3fff | ALL_ACCESS alternate                                | Seen in older Metasploit modules           |
-| 0x0478   | VM_WRITE+VM_OP+DUP_HANDLE+QUERY                     | No thread creation — APC or hijack path    |
-| 0x1438   | VM_WRITE+VM_OP+SUSPEND_RESUME+QUERY                 | Thread hijacking injection                 |
-| 0x0002   | CREATE_THREAD only                                  | Thread creation in already-written memory  |
-| 0x0008   | VM_OPERATION only                                   | VirtualProtect changes, no write           |
-| 0x101a   | VM_WRITE+VM_OP+VM_READ+QUERY_LIMITED                | Reflective DLL injection pattern           |
-| 0x147a   | VM_WRITE+VM_OP+CREATE_THREAD+DUP+QUERY+SUSPEND      | Full injection with suspend capability     |
 
+| Value    | Breakdown                                                | Technique / Context                         |
+|----------|----------------------------------------------------------|---------------------------------------------|
+| 0x1fffff | PROCESS_ALL_ACCESS                                       | Lazy injectors, lab code, commodity malware |
+| 0x143a   | VM_WRITE+VM_OP+CREATE_THREAD+QUERY                       | Classic CRT injection minimum               |
+| 0x1410   | VM_WRITE+VM_READ+VM_OP                                   | Memory write, no thread creation            |
+| 0x1010   | VM_READ+QUERY_LIMITED                                    | Reconnaissance, credential dumping          |
+| 0x0040   | DUP_HANDLE                                               | Handle duplication attacks                  |
+| 0x0800   | SUSPEND_RESUME                                           | Thread hijacking, context manipulation      |
+| 0x0010   | VM_READ only                                             | Memory scraping, credential theft           |
+| 0x0020   | VM_WRITE only                                            | Targeted memory patch                       |
+| 0x0400   | QUERY_INFORMATION only                                   | Process reconnaissance                      |
+| 0x1000   | QUERY_LIMITED_INFORMATION                                | Stealthy enumeration                        |
+| 0x047a   | VM_WRITE+VM_OP+CREATE_THREAD+DUP_HANDLE                  | Injection with handle duplication           |
+| 0x1f0fff | ALL_ACCESS older Windows builds                          | Pre-Win8 PROCESS_ALL_ACCESS variant         |
+| 0x1f3fff | ALL_ACCESS alternate                                     | Seen in older Metasploit modules            |
+| 0x0478   | VM_WRITE+VM_OP+DUP_HANDLE+QUERY                          | No thread creation — APC or hijack path     |
+| 0x1438   | VM_WRITE+VM_OP+SUSPEND_RESUME+QUERY                      | Thread hijacking injection                  |
+| 0x0002   | CREATE_THREAD only                                       | Thread creation in already-written memory   |
+| 0x0008   | VM_OPERATION only                                        | VirtualProtect changes, no write            |
+| 0x101a   | VM_WRITE+VM_OP+VM_READ+QUERY_LIMITED                     | Reflective DLL injection pattern            |
+| 0x147a   | VM_WRITE+VM_OP+CREATE_THREAD+DUP+QUERY+SUSPEND           | Full injection with suspend capability      |
+| 0x102a   | VM_WRITE+VM_OP+CREATE_THREAD+QUERY_LIMITED               | T6 DLL injection — lab observed             |
+| 0x142a   | VM_WRITE+VM_OP+CREATE_THREAD+QUERY+QUERY_LIMITED         | T5 direct syscall — lab observed            |
+| 0x1c28   | VM_WRITE+VM_OP+SUSPEND+QUERY_LIMITED                     | T3 APC injection minimum                    |
+| 0x1c2a   | VM_WRITE+VM_OP+CREATE_THREAD+SUSPEND+QUERY_LIMITED       | Full hijack with thread creation            |
+| 0x1028   | VM_WRITE+VM_OP+QUERY_LIMITED                             | Write without thread creation               |
+| 0x1038   | VM_WRITE+VM_OP+VM_READ+QUERY_LIMITED                     | Memory RW without thread                    |
+| 0x103a   | VM_WRITE+VM_OP+VM_READ+CREATE_THREAD+QUERY_LIMITED       | Full minimal inject — QUERY_LIMITED variant |
+| 0x042a   | VM_WRITE+VM_OP+CREATE_THREAD+QUERY_INFORMATION           | Requested minimum before kernel substitutes |
+| 0x042b   | VM_WRITE+VM_OP+CREATE_THREAD+DUP+QUERY_INFORMATION       | Injection with handle dup QUERY variant     |
+| 0x102b   | VM_WRITE+VM_OP+CREATE_THREAD+DUP+QUERY_LIMITED           | Handle dup minimal QUERY_LIMITED variant    |
+| 0x1f1fff | ALL_ACCESS variant 2                                     | Some C2 framework variants                  |
+| 0x1f2fff | ALL_ACCESS variant 3                                     | Some C2 framework variants                  |
+
+### Detection Priority
+| Priority | Values                              | Reason                               |
+|----------|-------------------------------------|--------------------------------------|
+| Critical | 0x1FFFFF;0x1F0FFF;0x1F3FFF          | All access, high risk                |
+| High     | 0x143A;0x147A;0x102A;0x1C28         | Classic injection combos             |
+| Medium   | 0x1410;0x1028;0x1038;0x103A;0x1438  | Memory ops without full access       |
+| Medium   | 0x0040;0x0800;0x0478                | Handle dup and suspend paths         |
+| Low      | 0x0010;0x0400;0x1000;0x0020         | Read/query alone — recon     
 
 ## Sysmon CallTrace explained
 CallTrace reads right to left with the rightmost entry is where execution started. UNKNOWN in calltrace means the code at that address has no associated PE module with raw code executing from VirtualAllocEx allocated memory and most often shellcode. All executables compiled with MinGW which show some KERNEL32 CRT noise in init. 
@@ -1329,15 +1350,15 @@ DestinationPortName: -"
 
 
 ### Sysmon Analysis
-EID 10 for t6_dll_injection.exe opening handle to Notepad was not present in the events at first. Only post-injection activity visible in EID 10. Checked GrantedAccess and it was 0x042A which is:
+EID 10 for t6_dll_injection.exe opening handle to Notepad was not present in the events at first. Only post-injection activity visible in EID 10. Checked GrantedAccess and it was 0x102a which is:
 ```
 PROCESS_VM_WRITE          0x0020
 PROCESS_VM_OPERATION      0x0008
 PROCESS_CREATE_THREAD     0x0002
-PROCESS_QUERY_INFORMATION 0x0400
-Total                     0x042a
+PROCESS_QUERY_LIMITED_INFORMATION 0x1000
+Total                     0x102a
 ```
-Updated ProcessInjectionDelux config in Sysmon EID 10 to include 0x042a, 0x043a and 0x0428 to cover variants without the PROCESS_QUERY_LIMITED_INFORMATION bit. Now GrantedAccess looks for include on (0x1FFFFF;0x1F0FFF;0x1F1FFF;0x1F2FFF;0x1F3FFF;0x143A;0x147A;0x047A;0x1410;0x1438;0x0478;0x1010;0x042A;0x043A;0x0428)
+Updated ProcessInjectionDelux config in Sysmon EID 10 to include 0x102a but also 0x042a, 0x043a and 0x0428 to cover variants without the PROCESS_QUERY_LIMITED_INFORMATION bit. Now GrantedAccess looks for include on (0x1FFFFF;0x1F0FFF;0x1F1FFF;0x1F2FFF;0x1F3FFF;0x143A;0x147A;0x047A;0x1410;0x1438;0x0478;0x1010;0x042A;0x43A;0x0428;0x102A)
 
 | Step | Action                                  | Sysmon EID | Rule Triggered           |
 |------|-----------------------------------------|------------|--------------------------|

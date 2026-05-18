@@ -114,6 +114,15 @@ CallTrace reads right to left with the rightmost entry is where execution starte
 | ntdll ← KERNELBASE ← KERNEL32 ← UNKNOWN   | Shellcode post-inject  |
 
 
+## Windows Process integrity 
+Rule: lower integrity cannot open handles to higher integrity processes with write or execute rights. For this lab all attempts are made from Medium -> Medium integrity process.
+Windows integrity levels (low to high):
+Low       → Untrusted
+Medium    → Standard user processes
+High      → Admin processes (UAC elevated)
+System    → SYSTEM account processes
+
+
 ## Lab setup
 1. Windows Host running ELK in WSL with local FW rules to push traffic to the host -> WSL
 2. Windows VM with Elastic Agent, Sysmon and sysmonconfig-olaf-filedelete.xml on bridged network

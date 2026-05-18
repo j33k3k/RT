@@ -115,8 +115,8 @@ CallTrace reads right to left with the rightmost entry is where execution starte
 
 
 ## Windows Process Integrity
-Lower integrity cannot open handles to higher integrity processes with write or execute rights. All lab injection attempts are made from Medium → Medium integrity process. Key Right for Cross-Integrity Injection
-SeDebugPrivilege allows a process to open handles to any process regardless of integrity level.
+Lower integrity cannot open handles to higher integrity processes with write or execute rights. All lab injection attempts are made from Medium → Medium integrity process. Key for Cross-Integrity Injections is
+SeDebugPrivilege which allows a process to open handles to any process regardless of integrity level.
 
 ### Integrity Levels
 | Level  | Context                         |
@@ -1648,3 +1648,7 @@ EID 8 completely absent, confirmed detection gap for thread hijacking as no thre
   through ntdll and KERNELBASE into injector binary.
 - **EID 10** `UNKNOWN(000001FBB4BC01BC)` shellcode executing from
   anonymous memory.
+
+
+## T9. NtCreateSection + NtMapViewOfSection injection
+Creates a shared memory section between the injector and target process, writes shellcode into it, then maps it into the target's address space. The key difference from all previous techniques is that VirtualAllocEx and WriteProcessMemory are never called instead memory is shared via section objects.

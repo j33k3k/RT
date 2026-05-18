@@ -1505,3 +1505,4 @@ Two different GrantedAccess values observed as Metasploit uses multiple handle o
 
 
 ## T8. Thread Hijacking
+Thread hijacking suspends an existing thread in the target process, modifies its instruction pointer to point at shellcode, then resumes it. No new thread is created the existing thread is redirected.

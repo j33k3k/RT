@@ -1402,7 +1402,7 @@ Updated ProcessInjectionDelux config in Sysmon EID 10 to include 0x102a but also
   shellcode into allocated memory.
 
 
-## Reflective DLL Injection
+## T7. Reflective DLL Injection
 Loads a DLL into a target process without using LoadLibraryA. Instead the DLL contains a custom loader function that maps itself into memory, resolves its own imports and relocations, then executes. The key detection difference from T6 is that no LoadLibrary call is made and the DLL never appears as a formally loaded module through the Windows loader. Used https://github.com/stephenfewer/ReflectiveDLLInjection with Metasploit module "windows/manage/reflective_dll_inject" to run this lab. It is assumeed that the attacker has already gained a meterpreter shell from the victim system before running this. 
 | API Call                  | Layer  | Sysmon Event          |
 |---------------------------|--------|-----------------------|
@@ -1502,3 +1502,6 @@ Two different GrantedAccess values observed as Metasploit uses multiple handle o
 - **EID 10** `UNKNOWN(0000000000CBDDFC)` Meterpreter shellcode
   executing from anonymous memory making API calls.
 - **EID 10** svchost.exe targeted by Meterpreter for process enumeration. 
+
+
+## T8. Thread Hijacking

@@ -863,6 +863,7 @@ find / -name "id_rsa" -o -name "id_ecdsa" -o -name ".ssh" 2>/dev/null
 cat ~/.bash_history; cat ~/.zsh_history
 cat ~/.bashrc; cat ~/.profile; env
 find / -writable -type f 2>/dev/null | grep -v proc
+find / -user root -writable -not -path "*/proc/*" -not -path "*/sys/*" 2>/dev/nul
 ```
 
 ### SUID / GUID Abuse

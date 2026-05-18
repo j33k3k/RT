@@ -114,13 +114,37 @@ CallTrace reads right to left with the rightmost entry is where execution starte
 | ntdll ← KERNELBASE ← KERNEL32 ← UNKNOWN   | Shellcode post-inject  |
 
 
-## Windows Process integrity 
-Rule: lower integrity cannot open handles to higher integrity processes with write or execute rights. For this lab all attempts are made from Medium -> Medium integrity process.
-Windows integrity levels (low to high):
-Low       → Untrusted
-Medium    → Standard user processes
-High      → Admin processes (UAC elevated)
-System    → SYSTEM account processes
+## Windows Process Integrity
+Lower integrity cannot open handles to higher integrity processes with write or execute rights. All lab injection attempts are made from Medium → Medium integrity process. Key Right for Cross-Integrity Injection
+SeDebugPrivilege allows a process to open handles to any process regardless of integrity level.
+
+### Integrity Levels
+| Level  | Context                         |
+|--------|---------------------------------|
+| Low    | Untrusted sandboxed processes   |
+| Medium | Standard user processes         |
+| High   | Admin processes (UAC elevated)  |
+| System | SYSTEM account processes        |
+
+### API Level Cross-Integrity Injection Flow
+| Step | Action                                                  |
+|------|---------------------------------------------------------|
+| 1    | OpenProcess(PROCESS_ALL_ACCESS, FALSE, system_pid)      |
+| 2    | Kernel checks caller integrity vs target integrity      |
+| 3    | Caller = Medium, target = System                        |
+| 4    | Kernel returns ERROR_ACCESS_DENIED (0x5)                |
+| 5    | hProc = NULL                                            |
+| 6    | Injection stops — never generates Sysmon events         |
+
+### Privilege Escalation Path Required for System Process Injection
+| Step | Action                                                        |
+|------|---------------------------------------------------------------|
+| 1    | Start as standard user (Medium integrity)                     |
+| 2    | Privesc via SeDebugPrivilege, token impersonation,            |
+|      | kernel exploit, or UAC bypass                                 |
+| 3    | Obtain SYSTEM or High integrity context                       |
+| 4    | OpenProcess succeeds against system processes                 |
+| 5    | Injection proceeds normally                                   |
 
 
 ## Lab setup

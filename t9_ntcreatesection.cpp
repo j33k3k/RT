@@ -1,3 +1,5 @@
+// Uses PROCESS_CREATE_THREA but can be done as combination with T8 Thread hijacking, see t9_ntcreatesection_hijack.cpp.
+
 #include "common.h"
 
 typedef NTSTATUS(NTAPI* pNtCreateSection)(

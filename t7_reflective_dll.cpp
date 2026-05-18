@@ -1,4 +1,4 @@
-// Issue getting this to work, instead go with metasploit session and https://github.com/stephenfewer/ReflectiveDLLInjection
+// Issue getting this code to work, instead:  1. Meterspreter session on target 2. Get DLL from https://github.com/stephenfewer/ReflectiveDLLInjection 3. Metasploit module windows/manage/reflective_dll_inject
 
 // Check PE entry point of the DLL
 // $bytes = [System.IO.File]::ReadAllBytes("C:\Users\jens\Documents\procInj\reflective_dll.x64.dll")

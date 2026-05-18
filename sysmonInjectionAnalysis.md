@@ -97,7 +97,7 @@ Process created or image modified
 | Low      | 0x0010;0x0400;0x1000;0x0020         | Read/query alone — recon     
 
 ## Sysmon CallTrace explained
-CallTrace reads right to left with the rightmost entry is where execution started. UNKNOWN in calltrace means the code at that address has no associated PE module with raw code executing from VirtualAllocEx allocated memory and most often shellcode. All executables compiled with MinGW which show some KERNEL32 CRT noise in init. 
+CallTrace reads right to left with the rightmost entry is where execution started. UNKNOWN in calltrace means the code at that address has no associated PE module with raw code executing from VirtualAllocEx allocated memory and most often shellcode. All executables compiled with MinGW which show some KERNEL32 CRT noise in init for example: ntdll.dll+162164 (thread startup) -> KERNELBASE.dll+360c6 (mingw boilerplate) -> payload.exe+160b (main() function).
 
 | CallTrace Origin          | Meaning                        | Suspicion  |
 |---------------------------|--------------------------------|------------|
@@ -1505,4 +1505,113 @@ Two different GrantedAccess values observed as Metasploit uses multiple handle o
 
 
 ## T8. Thread Hijacking
-Thread hijacking suspends an existing thread in the target process, modifies its instruction pointer to point at shellcode, then resumes it. No new thread is created the existing thread is redirected.
+Suspends an existing thread in the target process, modifies its instruction pointer to point at shellcode, then resumes it. No new thread is created the existing thread is redirected. 
+| API Call              | Layer | Sysmon Event |
+|-----------------------|-------|--------------|
+| OpenProcess()         | Win32 | EID 10       |
+| VirtualAllocEx()      | Win32 | —            |
+| WriteProcessMemory()  | Win32 | —            |
+| OpenThread()          | Win32 | —            |
+| SuspendThread()       | Win32 | —            |
+| GetThreadContext()    | Win32 | —            |
+| SetThreadContext()    | Win32 | —            |
+| ResumeThread()        | Win32 | —            |
+
+### Sysmon Data
+1. "Process accessed:
+RuleName: -
+UtcTime: 2026-05-18 13:02:21.789
+SourceProcessGUID: {ED9BFE1B-0DDD-6A0B-7B02-000000001400}
+SourceProcessId: 7992
+SourceThreadId: 2332
+SourceImage: C:\Users\jens\Documents\procInj\t8_thread_hijacking.exe
+TargetProcessGUID: {ED9BFE1B-0C95-6A0B-7302-000000001400}
+TargetProcessId: 6708
+TargetImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+GrantedAccess: 0x1428
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+162164|C:\WINDOWS\System32\KERNELBASE.dll+360c6|C:\Users\jens\Documents\procInj\t8_thread_hijacking.exe+160b|C:\Users\jens\Documents\procInj\t8_thread_hijacking.exe+10d9|C:\Users\jens\Documents\procInj\t8_thread_hijacking.exe+1456|C:\WINDOWS\System32\KERNEL32.DLL+2e957|C:\WINDOWS\SYSTEM32\ntdll.dll+427c
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+2. "Process Create:
+RuleName: technique_id=T1059.003,technique_name=Windows Command Shell
+UtcTime: 2026-05-18 13:02:51.242
+ProcessGuid: {ED9BFE1B-0DFB-6A0B-7C02-000000001400}
+ProcessId: 2860
+Image: C:\Windows\System32\cmd.exe
+FileVersion: 10.0.26100.8328 (WinBuild.160101.0800)
+Description: Windows Command Processor
+Product: Microsoft® Windows® Operating System
+Company: Microsoft Corporation
+OriginalFileName: Cmd.Exe
+CommandLine: cmd
+CurrentDirectory: C:\Users\jens\
+User: WIN11\jens
+LogonGuid: {ED9BFE1B-F575-6A0A-846C-0C0000000000}
+LogonId: 0xc6c84
+TerminalSessionId: 1
+IntegrityLevel: Medium
+Hashes: SHA1=8EFFECCD068002141AEF22B095A52E1D41656C98,MD5=CED4AA0B4CBF72E2520E0A2CCFF79370,SHA256=D5697FEF6995E992B9232A2B19665A297743427316C7225A5B772F0032F20FCA,IMPHASH=B0F049C014592B156EB1FA857E99CEB9
+ParentProcessGuid: {ED9BFE1B-0C95-6A0B-7302-000000001400}
+ParentProcessId: 6708
+ParentImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+ParentCommandLine: ""C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe"" RestartByRestartManager:* 
+ParentUser: WIN11\jens"
+
+3. "Process accessed:
+RuleName: technique_id=T1055.001,technique_name=Dynamic-link Library Injection
+UtcTime: 2026-05-18 13:02:51.251
+SourceProcessGUID: {ED9BFE1B-0C95-6A0B-7302-000000001400}
+SourceProcessId: 6708
+SourceThreadId: 7516
+SourceImage: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+TargetProcessGUID: {ED9BFE1B-0DFB-6A0B-7C02-000000001400}
+TargetProcessId: 2860
+TargetImage: C:\WINDOWS\system32\cmd.exe
+GrantedAccess: 0x1fffff
+CallTrace: C:\WINDOWS\SYSTEM32\ntdll.dll+1636b4|C:\WINDOWS\System32\KERNELBASE.dll+8b82d|C:\WINDOWS\System32\KERNELBASE.dll+88d43|C:\WINDOWS\System32\KERNELBASE.dll+888a6|C:\WINDOWS\System32\KERNEL32.DLL+44f14|UNKNOWN(000001FBB4BC01BC)
+SourceUser: WIN11\jens
+TargetUser: WIN11\jens"
+
+4. "Network connection detected:
+RuleName: technique_id=T1571,technique_name=Non-Standard Port
+UtcTime: 2026-05-18 13:02:58.388
+ProcessGuid: {ED9BFE1B-0C95-6A0B-7302-000000001400}
+ProcessId: 6708
+Image: C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2512.29.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe
+User: WIN11\jens
+Protocol: tcp
+Initiated: true
+SourceIsIpv6: false
+SourceIp: 192.168.32.12
+SourceHostname: -
+SourcePort: 61652
+SourcePortName: -
+DestinationIsIpv6: false
+DestinationIp: 192.168.32.49
+DestinationHostname: -
+DestinationPort: 4444
+DestinationPortName: -"
+
+### Sysmon Analysis
+EID 8 completely absent, confirmed detection gap for thread hijacking as no thread is created so PsSetCreateThreadNotifyRoutine never fires. EID 10 shows GrantedAccess 0x1428 notably missing PROCESS_CREATE_THREAD (0x0002) compared to T1-T6. This can be used as forensic signature of thread hijacking vs thread creation injection. Will need to add 0x1428 to the sysmon config. 30 second gap between injection and shell spawn. Thread hijacking disrupts the target thread, notepad may have been in a wait state when hijacked causing delayed execution. Normal behavior for thread hijacking depending on which thread is targeted.
+
+| Step | Action                                  | Sysmon EID | Rule Triggered          |
+|------|-----------------------------------------|------------|-------------------------|
+| 1    | Injector opens handle to Notepad        | EID 10     | New rule name needed    |
+| 2    | Shellcode written to remote memory      | -          | -                       |
+| 3    | Target thread suspended                 | -          | -                       |
+| 4    | Thread context redirected to shellcode  | -          | -                       |
+| 5    | Thread resumed — executes shellcode     | -          | -                       |
+| 6    | Shellcode opens handle to cmd.exe       | EID 10     | ProcessInjectionDelux   |
+
+### Key Indicators
+- **EID 8 absent** confirmed gap. No thread created so kernel
+  callback never fires. Cannot detect thread hijacking via EID 8.
+- **EID 10** `GrantedAccess: 0x1428` missing PROCESS_CREATE_THREAD
+  (0x0002). Forensic signature distinguishing hijacking from thread
+  creation injection.
+- **EID 10** `CallTrace: t8_thread_hijacking.exe+160b` clean chain
+  through ntdll and KERNELBASE into injector binary.
+- **EID 10** `UNKNOWN(000001FBB4BC01BC)` shellcode executing from
+  anonymous memory.
